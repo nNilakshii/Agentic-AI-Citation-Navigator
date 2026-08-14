@@ -13,8 +13,10 @@ pymupdf==1.28.2
 sentence-transformers==3.1.1
 
 # --- LLM clients (Phase 1+, only called where they clearly help) ---
-openai==1.51.0
+# Gemini is the current dev provider: free tier, no card required.
+google-genai==2.18.1
 anthropic==0.36.0
+openai==1.51.0
 
 # --- Scholarly data (Phase 2-3) ---
 requests==2.32.3
