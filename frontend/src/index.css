@@ -1,0 +1,26 @@
+body {
+  font-family: system-ui, sans-serif;
+  max-width: 640px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+.goal-picker {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.goal-picker button {
+  padding: 0.5rem 1rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: white;
+  cursor: pointer;
+}
+
+.goal-picker button.active {
+  background: #2563eb;
+  color: white;
+  border-color: #2563eb;
+}
