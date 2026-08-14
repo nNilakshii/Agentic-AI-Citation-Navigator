@@ -134,6 +134,30 @@ GCP Vertex, whichever is funded. Provider is a `.env` setting, not a code change
 produces a number for the write-up pins an explicit version, since an alias shifting under a
 recorded result would invalidate it.
 
+### Semantic Scholar: 1 req/sec is a hard architectural constraint
+
+The approved API key (2026-08-14) allows **1 request per second, cumulative across all
+endpoints** — not per endpoint. Two consequences that shape `bridge/`:
+
+**1. Batch, don't loop.** Resolving a bibliography one paper at a time is the obvious
+implementation and the wrong one:
+
+| Approach | ~2,000 references |
+|---|---|
+| `GET /paper/{id}` per reference | ~33 minutes |
+| `POST /paper/batch`, 500 IDs per call | ~4 seconds |
+
+Reference resolution must collect identifiers first and resolve them in batches. Per-paper
+lookup is acceptable only for a single interactive click, never for an eval run.
+
+**2. One shared rate limiter, not one per call site.** Because the quota is cumulative, a
+per-endpoint or per-module limiter would still exceed it whenever two code paths run
+concurrently. All Semantic Scholar traffic goes through a single client object owning one
+limiter, with retry-and-backoff on 429.
+
+Combined with the response cache below, a re-run of the eval harness should issue close to
+zero live requests — only genuinely new papers reach the network.
+
 ### Caching: filesystem, content-addressed
 
 Every expensive or rate-limited result is cached to disk under `data/cache/` (gitignored):
