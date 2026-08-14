@@ -19,7 +19,7 @@ Annotate each task with a short status/date, e.g. `— Done 2026-08-14` or `— 
 - [x] **0.3** Get API keys & configure `.env` (LLM, Semantic Scholar, OpenAlex) — Done 2026-08-14: `.env` configured, all checks green via `backend/scripts/check_env.py`. LLM provider = **Gemini free tier** (key verified, 28 gemini-* models available); OpenAlex on the polite pool. Anthropic/Vertex deferred to Phase 2.8 where model quality is what's measured; Semantic Scholar key still worth requesting (slow to arrive, works unauthenticated meanwhile)
 - [ ] **0.4** Literature review — reading tools (Semantic Reader, CiteRead, PaperMage)
 - [ ] **0.5** Literature review — citation NLP (CL-SciSumm, SciCite, Specter2)
-- [ ] **0.6** Finalize architecture & stack (`docs/architecture.md`)
+- [x] **0.6** Finalize architecture & stack (`docs/architecture.md`) — Done 2026-08-14: document model (char offsets + bboxes), stack table, backend layout, data flow, risks. Decided PyMuPDF-then-GROBID and Allen AI pdf-component-library
 - [x] **0.7** Collect 5–10 sample arXiv papers for testing — Done 2026-08-14: `backend/scripts/fetch_sample_papers.py` fetches 10 curated open-access arXiv PDFs into `data/samples/` (PDFs gitignored; script is the source of truth)
 - [x] **0.8** Set up Claude Code + CLAUDE.md + first commit — Done 2026-08-14: CLAUDE.md committed in 6677dc6, `.claude/` settings in place
 
