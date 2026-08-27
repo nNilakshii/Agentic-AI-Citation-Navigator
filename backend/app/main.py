@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api import reader
 from app.config import get_settings
 
 app = FastAPI(title="AURA Citation Navigator API", version="0.1.0")
@@ -19,8 +20,7 @@ def health() -> dict:
 
 
 # --- Phase 1: base reading assistant + goal-adaptive reading ---
-# from app.api import reader
-# app.include_router(reader.router, prefix="/api/reader", tags=["reader"])
+app.include_router(reader.router, prefix="/api/reader", tags=["reader"])
 
 # --- Phase 2: Citation Bridge (cited-span localization) ---
 # from app.api import citation_bridge

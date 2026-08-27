@@ -259,8 +259,42 @@ Cost accepted: heavier install, thinner documentation, smaller community. If it 
 unworkable during 1.3, react-pdf is the fallback — and the `ParsedPaper` bboxes feed either
 renderer, so the backend is unaffected by a switch.
 
+## Decided: sentence segmenter — hand-rolled
+
+Settled at 1.1 (2026-08-26). `app/core/segmentation.py`, no new dependency.
+
+pysbd and spaCy both segment better prose than a hand-rolled splitter, and both were
+rejected for the same reason: the requirement here is not *sentence texts* but *offsets into
+the exact string we built*. A library that normalises whitespace or re-tokenises breaks the
+offset contract the whole architecture rests on. Scientific text also needs a custom
+abbreviation list either way ("et al.", "Fig. 3", "0.05", "J. Doe").
+
+The splitter also enforces a 1000-character cap, splitting at whitespace. Measured on the
+sample papers this fires on 3 of 6,421 spans (0.05%), all extracted table bodies with no
+terminal punctuation anywhere. Splitting them does not make them prose — it bounds what the
+embedder (1.6) and the LLM prompts have to accept.
+
+## What 1.1 actually needed, beyond the plan
+
+Verified against all ten sample papers: **0 offset mismatches, 0 sentences without
+geometry**, 0.3–1.0 s per paper. Four corrections the plan did not anticipate, each one
+found by parsing real PDFs rather than synthetic ones:
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `3` and `Model Architecture` became two sections | LaTeX emits the section number as its own block | Bare numbers are merged with the following line |
+| Half of a two-column heading became a section | ACM templates wrap long headings | A heading absorbs an adjacent continuation line set in the same type |
+| The title came out as `arXiv:1706.03762v7 [cs.CL]` | The rotated arXiv stamp is the largest type on page 1 | Excluded from both heading and title detection |
+| Table rows (`84.2 91.1`, `93.1`) became sections | They match "numbered heading" on typography alone | Titles must start with a letter; section numbers must be monotonic (`_NumberingGuard`) |
+
+The last one is the general lesson: **typography alone cannot separate a section number from
+a table cell** — both are bold, both are short, both begin with a number. Document-level
+sequence is the signal that does, so numbering is validated against what came before.
+
+Heading detection stays a heuristic, and one-off run-in labels still slip through. That is
+tolerable by construction: a missed heading only means text belongs to the previous section,
+and GROBID is already queued for 2.1 where reference parsing forces the issue.
+
 ## Open decisions
 
-- **Sentence segmenter** — a hand-rolled abbreviation-aware splitter, or a dependency
-  (pysbd / spaCy). Decide at 1.1; affects nothing outside `core/`.
 - **GROBID adoption** — revisit at 2.1, where structured reference parsing is the task.
