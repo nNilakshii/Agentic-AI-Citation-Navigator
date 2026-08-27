@@ -29,9 +29,9 @@ _Working order (dependency-driven): 1.1 → 1.2 → 1.3+1.4 → 1.5 → 1.6 → 
 
 - [x] **1.1** PDF parsing pipeline → structured JSON (sections, sentences, offsets) — Done 2026-08-26: `app/core/` (layout → sections → segmentation → highlights), PyMuPDF span-walk builds `full_text` with offsets as a byproduct. Verified on all 10 sample papers: **0 offset mismatches, 0 sentences without bboxes**, 0.3–1.0s/paper. Sentence segmenter decided hand-rolled (see `docs/architecture.md`)
 - [x] **1.2** FastAPI backend skeleton + parse/upload endpoint — Done 2026-08-26: `/api/reader` — upload, parse-sample, get, outline, pdf, list. Content-addressed disk cache (`PaperStore`); cached re-parse 0.01s vs 0.35s cold. 52 tests green
-- [~] **1.3** React frontend skeleton + render a PDF — Skeleton (goal picker, backend ping) done 2026-08-14, PDF render still open. **Next up**, together with 1.4
-- [ ] **1.4** Basic reader UI (open, scroll, section outline)
-- [ ] **1.5** Goal-selection modal (Skim / In-depth / Critique)
+- [x] **1.3** React frontend skeleton + render a PDF — Done 2026-08-26: `react-pdf` 10 continuous-scroll viewer. **Renderer decision reversed** — `@allenai/pdf-components` pins pdf.js 2.14 (GHSA-wgrm-67xf-hhpq, arbitrary JS execution from a malicious PDF) and refuses React 18; rationale in `docs/architecture.md`. Overlay written in-house (~40 lines) since the parser already emits exact bboxes
+- [x] **1.4** Basic reader UI (open, scroll, section outline) — Done 2026-08-26: sample picker + upload, continuous scroll, section outline with nesting, click-to-jump, scroll tracking. 64 vitest tests; verified in Chrome (18 assertions incl. highlight geometry + resize alignment), which caught 2 bugs jsdom could not
+- [ ] **1.5** Goal-selection modal (Skim / In-depth / Critique) — Sidebar goal control exists and holds state; still needs to be a proper selection step and to feed 1.6
 - [ ] **1.6** Goal-conditioned passage ranking (LLM prompt)
 - [ ] **1.7** Render highlights / reading path overlay
 - [ ] **1.8** Side-panel plain-language explanations (grounded)

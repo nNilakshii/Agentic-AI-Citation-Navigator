@@ -6,7 +6,15 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      // The reader API and the backend health check both live on the backend.
       "/api": "http://localhost:8000",
+      "/health": "http://localhost:8000",
     },
+  },
+  test: {
+    environment: "jsdom",
+    globals: true,
+    setupFiles: "./src/test/setup.js",
+    css: false,
   },
 });

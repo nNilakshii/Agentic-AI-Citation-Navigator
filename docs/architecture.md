@@ -99,7 +99,7 @@ as a sanity check, not as the source of truth.
 | LLM | Gemini free tier now; Claude at 2.8 | See "LLM provider" below |
 | Scholarly data | Semantic Scholar (primary), OpenAlex (fallback) | S2 gives citation `contexts`/`intents`; OpenAlex needs no key |
 | Frontend | React + Vite | Already scaffolded |
-| PDF rendering | Allen AI `pdf-component-library` | Ships the highlight-overlay primitives Phase 1.7 needs — see "Decided" below |
+| PDF rendering | **`react-pdf` 10 (pdf.js 5)** | Overlay written in-house; the alternative shipped a known RCE — see "Decided" below |
 | Storage | JSON files on disk, content-hash keyed | No database until something forces one |
 
 ### PDF parsing: PyMuPDF first, GROBID when Phase 2 needs it
@@ -240,24 +240,44 @@ the measurable research contribution; Phase 3 is an extension, not a prerequisit
 
 ---
 
-## Decided: PDF renderer
+## Decided: PDF renderer — ~~pdf-component-library~~ **react-pdf**
 
-**Allen AI `pdf-component-library`** (the PaperCraft / Semantic Reader lineage), decided
-2026-08-14.
+Originally decided 2026-08-14 in favour of Allen AI's `pdf-component-library` (the
+PaperCraft / Semantic Reader lineage), because the highlight overlay is the hard part of
+Phase 1 and that library ships the primitives for it. **Reversed at 1.3 on 2026-08-26**,
+after trying the install the original entry said to try.
 
-The alternative was `react-pdf`: simpler, better documented, faster to a working reader. It
-was rejected because the highlight overlay *is* the hard part of Phase 1, and react-pdf
-leaves you to build it — absolute-positioned layers, PDF-point-to-CSS-pixel scaling, and
-re-positioning on zoom and resize. `pdf-component-library` ships those primitives, so 1.7
-becomes "pass the spans in" rather than "write an overlay engine."
+`@allenai/pdf-components@1.0.2` — last published 2022 — is not usable here:
 
-It also shares a lineage with Semantic Reader and CiteRead, the prior work named in
-`CLAUDE.md` — building on the same foundation is easier to justify in the write-up than
-reimplementing it.
+| Finding | Consequence |
+|---|---|
+| Peer-depends on `react@^16.8.0` | Refuses to install against this project's React 18 without `--legacy-peer-deps` |
+| Hard-pins `react-pdf@6.0.0-beta.2` → `pdfjs-dist@2.14.305` | Inherits **GHSA-wgrm-67xf-hhpq**: arbitrary JavaScript execution on opening a malicious PDF, fixed only in pdf.js ≥ 4.2 |
+| Published `package.json` declares no `main`, `module` or `exports` | Bundler resolution fails out of the box |
 
-Cost accepted: heavier install, thinner documentation, smaller community. If it proves
-unworkable during 1.3, react-pdf is the fallback — and the `ParsedPaper` bboxes feed either
-renderer, so the backend is unaffected by a switch.
+The security finding is the decisive one, and it is specific to this project rather than
+generic hygiene: **Phase 2.3 fetches cited-paper PDFs from the open web and renders them.**
+Shipping a reader that executes script from a fetched PDF would make the citation bridge —
+the measurable research contribution — the attack surface.
+
+So: **`react-pdf@10` (pdf.js 5.x, patched)**, which the original entry pre-authorised as the
+fallback. Production dependencies audit clean.
+
+The accepted cost was writing the overlay ourselves. It came to about forty lines
+(`src/lib/geometry.js` + `src/components/HighlightLayer.jsx`), because the backend already
+emits exact bboxes in PDF points with a top-left origin — the same orientation as CSS — so
+the transform is one multiply by a scale factor. That scale is *measured* from the rendered
+page (`renderedWidth / originalWidth`) rather than assumed, which is what keeps highlights
+aligned through zoom and resize.
+
+Verified in Chrome against the Transformer paper: 56/56 highlight rectangles land inside the
+correct page, all line-height sized, none zero-size, and still 56/56 aligned after resizing
+the window from 1440px to 1000px.
+
+Losing the Semantic Reader lineage is a real cost to the write-up's "builds on prior work"
+framing. It is recoverable: the citation is to the *ideas* in Semantic Reader and CiteRead,
+which the literature review already covers, and `ParsedPaper` bboxes feed either renderer, so
+a future switch remains a frontend-only change.
 
 ## Decided: sentence segmenter — hand-rolled
 
@@ -295,6 +315,28 @@ Heading detection stays a heuristic, and one-off run-in labels still slip throug
 tolerable by construction: a missed heading only means text belongs to the previous section,
 and GROBID is already queued for 2.1 where reference parsing forces the issue.
 
+## What 1.3 / 1.4 needed, beyond the plan
+
+Two defects that only a real browser could show, both in the same place — the outline's
+"you are here" marker fighting the reader's explicit choice:
+
+1. A smooth scroll travels *through* the pages between here and the target, and the
+   `IntersectionObserver` reports every one of them. Clicking "3.2.1" left the outline
+   marking "3 Model Architecture", whichever section the jump happened to fly past.
+2. On arrival, the target page's *first* section is not necessarily the one clicked — a page
+   holds several sections, so page-level tracking is strictly coarser than a click.
+
+Both are fixed in `App.jsx`: scroll reports are ignored for 1200 ms after a jump, and an
+explicit selection wins on its own page. The general lesson for the phases ahead —
+2.12 jumps to a cited span, 1.7 jumps along a reading path — is that **scroll position is a
+lagging, lower-resolution signal than an intentional navigation**, and must never overwrite
+one.
+
 ## Open decisions
 
 - **GROBID adoption** — revisit at 2.1, where structured reference parsing is the task.
+- **Browser-level test harness** — 1.3/1.4 were verified with a throwaway Playwright script
+  driving system Chrome (18 assertions: rasterisation, outline, highlight geometry, resize
+  alignment, upload, console errors). It caught two bugs that 64 jsdom tests could not, since
+  jsdom has no canvas and no layout. Worth adopting as a committed suite; deferred because it
+  adds a heavy dependency, and Phase 4.5 (reproducibility) is the natural place to decide.
