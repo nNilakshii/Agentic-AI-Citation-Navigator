@@ -17,16 +17,19 @@ Annotate each task with a short status/date, e.g. `— Done 2026-08-14` or `— 
 - [x] **0.1** Create GitHub repo + project skeleton — Done 2026-08-14
 - [x] **0.2** Set up local dev environment (Python venv + Node) — Done 2026-08-14: backend/.venv (Py 3.14.6, all requirements installed, pytest passes), frontend node_modules (Node 25.2.1, vite build passes)
 - [x] **0.3** Get API keys & configure `.env` (LLM, Semantic Scholar, OpenAlex) — Done 2026-08-14: `.env` configured, all checks green via `backend/scripts/check_env.py`. LLM provider = **Gemini free tier** (key verified, 28 gemini-* models available); OpenAlex on the polite pool. Anthropic/Vertex deferred to Phase 2.8 where model quality is what's measured. Semantic Scholar key approved + configured (1 req/sec cumulative across all endpoints — see `docs/architecture.md`, this forces batch resolution + a shared rate limiter in Phase 2.2)
-- [ ] **0.4** Literature review — reading tools (Semantic Reader, CiteRead, PaperMage)
-- [ ] **0.5** Literature review — citation NLP (CL-SciSumm, SciCite, Specter2)
+- [x] **0.4** Literature review — reading tools (Semantic Reader, CiteRead, PaperMage) — Done 2026-08-14: `docs/literature-review.md` Part A (Semantic Reader, PaperMage, GROBID, CiteRead, CiteSee, CitePeek)
+- [x] **0.5** Literature review — citation NLP (CL-SciSumm, SciCite, Specter2) — Done 2026-08-14: `docs/literature-review.md` Part B + Part C synthesis (revised novelty claim)
 - [x] **0.6** Finalize architecture & stack (`docs/architecture.md`) — Done 2026-08-14: document model (char offsets + bboxes), stack table, backend layout, data flow, risks. Decided PyMuPDF-then-GROBID and Allen AI pdf-component-library
 - [x] **0.7** Collect 5–10 sample arXiv papers for testing — Done 2026-08-14: `backend/scripts/fetch_sample_papers.py` fetches 10 curated open-access arXiv PDFs into `data/samples/` (PDFs gitignored; script is the source of truth)
 - [x] **0.8** Set up Claude Code + CLAUDE.md + first commit — Done 2026-08-14: CLAUDE.md committed in 6677dc6, `.claude/` settings in place
 
 ## Phase 1 · Base Reading Assistant + Goal-Adaptive Reading
-- [ ] **1.1** PDF parsing pipeline → structured JSON (sections, sentences, offsets)
-- [~] **1.2** FastAPI backend skeleton + parse/upload endpoint — Skeleton (health check) done 2026-08-14, parse/upload endpoint still open
-- [~] **1.3** React frontend skeleton + render a PDF — Skeleton (goal picker, backend ping) done 2026-08-14, PDF render still open
+
+_Working order (dependency-driven): 1.1 → 1.2 → 1.3+1.4 → 1.5 → 1.6 → 1.7 → 1.8 → 1.9 → 1.10._
+
+- [x] **1.1** PDF parsing pipeline → structured JSON (sections, sentences, offsets) — Done 2026-08-26: `app/core/` (layout → sections → segmentation → highlights), PyMuPDF span-walk builds `full_text` with offsets as a byproduct. Verified on all 10 sample papers: **0 offset mismatches, 0 sentences without bboxes**, 0.3–1.0s/paper. Sentence segmenter decided hand-rolled (see `docs/architecture.md`)
+- [x] **1.2** FastAPI backend skeleton + parse/upload endpoint — Done 2026-08-26: `/api/reader` — upload, parse-sample, get, outline, pdf, list. Content-addressed disk cache (`PaperStore`); cached re-parse 0.01s vs 0.35s cold. 52 tests green
+- [~] **1.3** React frontend skeleton + render a PDF — Skeleton (goal picker, backend ping) done 2026-08-14, PDF render still open. **Next up**, together with 1.4
 - [ ] **1.4** Basic reader UI (open, scroll, section outline)
 - [ ] **1.5** Goal-selection modal (Skim / In-depth / Critique)
 - [ ] **1.6** Goal-conditioned passage ranking (LLM prompt)
