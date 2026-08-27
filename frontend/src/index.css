@@ -1,26 +1,334 @@
+:root {
+  --sidebar-width: 300px;
+  --border: #e2e5ea;
+  --text: #1a1d23;
+  --muted: #6b7280;
+  --accent: #2563eb;
+  --accent-soft: #eff4ff;
+  --page-bg: #f4f5f7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
 body {
-  font-family: system-ui, sans-serif;
-  max-width: 640px;
-  margin: 2rem auto;
-  padding: 0 1rem;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--text);
+  background: var(--page-bg);
 }
 
-.goal-picker {
-  display: flex;
-  gap: 0.5rem;
-  margin: 1rem 0;
-}
-
-.goal-picker button {
-  padding: 0.5rem 1rem;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  background: white;
+button {
+  font: inherit;
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* --- layout ------------------------------------------------------- */
+
+.app {
+  display: flex;
+  height: 100%;
+}
+
+.sidebar {
+  width: var(--sidebar-width);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.25rem 1rem;
+  background: #fff;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+.sidebar__header h1 {
+  margin: 0;
+  font-size: 1.4rem;
+  letter-spacing: 0.02em;
+}
+
+.sidebar__tagline {
+  margin: 0.15rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.sidebar__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sidebar__section--grow {
+  flex: 1;
+  min-height: 0;
+}
+
+.sidebar__hint,
+.sidebar__empty {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.reader {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.reader__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1.25rem;
+  background: #fff;
+  border-bottom: 1px solid var(--border);
+}
+
+.reader__header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.reader__meta {
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.reader__busy {
+  font-size: 0.8rem;
+  color: var(--accent);
+}
+
+.reader__error {
+  margin: 0;
+  padding: 0.7rem 1.25rem;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 0.85rem;
+  border-bottom: 1px solid #fecaca;
+}
+
+/* --- picker ------------------------------------------------------- */
+
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.picker__label {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.picker__file {
+  display: none;
+}
+
+.picker__upload {
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 500;
+}
+
+.picker__samples {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.picker__sample {
+  width: 100%;
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  font-size: 0.82rem;
+  color: var(--text);
+  text-transform: capitalize;
+}
+
+.picker__sample:hover:not(:disabled) {
+  background: var(--page-bg);
+}
+
+.picker__sample--active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* --- goal picker --------------------------------------------------- */
+
+.goal-picker {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.goal-picker button {
+  flex: 1;
+  padding: 0.4rem 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.goal-picker button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .goal-picker button.active {
-  background: #2563eb;
-  color: white;
-  border-color: #2563eb;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* --- outline ------------------------------------------------------ */
+
+.outline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+}
+
+.outline__item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  text-align: left;
+  font-size: 0.82rem;
+  color: var(--text);
+}
+
+.outline__item:hover {
+  background: var(--page-bg);
+}
+
+.outline__item--active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.outline__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outline__page {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- viewer ------------------------------------------------------- */
+
+.viewer {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.viewer--empty {
+  justify-content: center;
+  color: var(--muted);
+}
+
+.viewer__status {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.viewer__status--error {
+  color: #b91c1c;
+}
+
+.viewer__page {
+  position: relative;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
+}
+
+.viewer__page-number {
+  position: absolute;
+  right: 6px;
+  bottom: 4px;
+  font-size: 0.65rem;
+  color: var(--muted);
+  background: rgb(255 255 255 / 80%);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+/* --- highlights ---------------------------------------------------- */
+
+/* Sits above the canvas and the text layer, but must never swallow a click or
+   a text selection — the reader still has to be able to select the PDF text. */
+.highlight-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.highlight {
+  position: absolute;
+  border-radius: 2px;
+  mix-blend-mode: multiply;
+}
+
+.highlight--path {
+  background: rgb(250 204 21 / 45%);
+}
+
+.highlight--cited {
+  background: rgb(56 189 248 / 45%);
 }
