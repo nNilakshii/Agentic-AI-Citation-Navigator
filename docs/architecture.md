@@ -1,7 +1,7 @@
 # Architecture
 
-Decisions and their rationale, recorded as they're made. See root `CLAUDE.md` for the
-build order and `docs/TASKS.md` for status.
+Decisions and their rationale, recorded as they're made. See `docs/TASKS.md` for the
+build order and status.
 
 ---
 
@@ -251,8 +251,8 @@ leaves you to build it — absolute-positioned layers, PDF-point-to-CSS-pixel sc
 re-positioning on zoom and resize. `pdf-component-library` ships those primitives, so 1.7
 becomes "pass the spans in" rather than "write an overlay engine."
 
-It also shares a lineage with Semantic Reader and CiteRead, the prior work named in
-`CLAUDE.md` — building on the same foundation is easier to justify in the write-up than
+It also shares a lineage with Semantic Reader and CiteRead, the prior work this project
+builds on — building on the same foundation is easier to justify in the write-up than
 reimplementing it.
 
 Cost accepted: heavier install, thinner documentation, smaller community. If it proves
