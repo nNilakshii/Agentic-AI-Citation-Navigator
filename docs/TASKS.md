@@ -6,10 +6,10 @@ Mirror the high-level status into the Google Sheet whenever you want a shareable
 **Status key:** `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked
 Annotate each task with a short status/date, e.g. `— Done 2026-08-14` or `— Blocked: GROBID setup`.
 
-## How to update (paste into Claude Code after a work session)
-> "Look at my git commits since <date or last update>. Update docs/TASKS.md: check off
-> completed tasks, mark in-progress ones `[~]`, and add today's date. Leave a one-line note
-> on anything blocked. Don't change task text or IDs."
+## How to update (after a work session)
+Review the git commits since the last update, then check off completed tasks, mark
+in-progress ones `[~]`, and add the date. Leave a one-line note on anything blocked.
+Task text and IDs stay as they are.
 
 ---
 
@@ -21,7 +21,7 @@ Annotate each task with a short status/date, e.g. `— Done 2026-08-14` or `— 
 - [ ] **0.5** Literature review — citation NLP (CL-SciSumm, SciCite, Specter2)
 - [x] **0.6** Finalize architecture & stack (`docs/architecture.md`) — Done 2026-08-14: document model (char offsets + bboxes), stack table, backend layout, data flow, risks. Decided PyMuPDF-then-GROBID and Allen AI pdf-component-library
 - [x] **0.7** Collect 5–10 sample arXiv papers for testing — Done 2026-08-14: `backend/scripts/fetch_sample_papers.py` fetches 10 curated open-access arXiv PDFs into `data/samples/` (PDFs gitignored; script is the source of truth)
-- [x] **0.8** Set up Claude Code + CLAUDE.md + first commit — Done 2026-08-14: CLAUDE.md committed in 6677dc6, `.claude/` settings in place
+- [x] **0.8** Project docs + first commit — Done 2026-08-14
 
 ## Phase 1 · Base Reading Assistant + Goal-Adaptive Reading
 - [ ] **1.1** PDF parsing pipeline → structured JSON (sections, sentences, offsets)
