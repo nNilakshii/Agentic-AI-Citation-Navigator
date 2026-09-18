@@ -440,9 +440,47 @@ button:disabled {
 }
 
 .highlight--path {
-  background: rgb(250 204 21 / 45%);
+  background: rgb(250 204 21 / 32%);
 }
+
+/* Importance 1-5 from the ranker. The strongest is clearly the eye's first
+   stop while the weakest still reads as a highlight rather than a smudge. */
+.highlight--i1 { background: rgb(250 204 21 / 18%); }
+.highlight--i2 { background: rgb(250 204 21 / 28%); }
+.highlight--i3 { background: rgb(250 204 21 / 40%); }
+.highlight--i4 { background: rgb(251 191 36 / 52%); }
+.highlight--i5 { background: rgb(251 146 60 / 60%); }
 
 .highlight--cited {
   background: rgb(56 189 248 / 45%);
+}
+
+/* --- reading path status (1.7) -------------------------------------- */
+
+.path-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.path-status--error p {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #b91c1c;
+}
+
+.path-status__warning {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: #92400e;
+}
+
+.path-status__retry {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 0.72rem;
+  color: var(--accent);
+  text-decoration: underline;
 }

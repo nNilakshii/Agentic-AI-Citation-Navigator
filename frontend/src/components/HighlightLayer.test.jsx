@@ -45,3 +45,42 @@ describe("HighlightLayer", () => {
     );
   });
 });
+
+describe("importance (1.7)", () => {
+  it("draws a more important span more strongly", () => {
+    render(
+      <HighlightLayer
+        bboxes={[
+          { page: 0, x0: 0, y0: 0, x1: 10, y1: 10, importance: 5 },
+          { page: 0, x0: 0, y0: 20, x1: 10, y1: 30, importance: 1 },
+        ]}
+        scale={1}
+      />,
+    );
+
+    const drawn = screen.getByTestId("highlight-layer").children;
+    expect(drawn[0]).toHaveClass("highlight--i5");
+    expect(drawn[1]).toHaveClass("highlight--i1");
+  });
+
+  it("clamps an out-of-range importance rather than emitting a bad class", () => {
+    render(
+      <HighlightLayer
+        bboxes={[{ page: 0, x0: 0, y0: 0, x1: 10, y1: 10, importance: 99 }]}
+        scale={1}
+      />,
+    );
+
+    expect(screen.getByTestId("highlight-layer").firstChild).toHaveClass(
+      "highlight--i5",
+    );
+  });
+
+  it("falls back to the plain variant when there is no importance", () => {
+    render(<HighlightLayer bboxes={[{ page: 0, x0: 0, y0: 0, x1: 10, y1: 10 }]} scale={1} />);
+
+    const drawn = screen.getByTestId("highlight-layer").firstChild;
+    expect(drawn).toHaveClass("highlight--path");
+    expect(drawn.className).not.toMatch(/highlight--i\d/);
+  });
+});

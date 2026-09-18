@@ -72,3 +72,28 @@ describe("bboxesOnPage", () => {
     expect(bboxesOnPage([{ page: 0 }], 0)).toEqual([]);
   });
 });
+
+describe("importance propagation (1.7)", () => {
+  it("carries a sentence's importance onto each of its bboxes", () => {
+    const sentences = [
+      {
+        importance: 4,
+        bboxes: [
+          { page: 0, x0: 0, y0: 0, x1: 1, y1: 1 },
+          { page: 0, x0: 2, y0: 2, x1: 3, y1: 3 },
+        ],
+      },
+    ];
+
+    const found = bboxesOnPage(sentences, 0);
+
+    expect(found).toHaveLength(2);
+    expect(found.every((b) => b.importance === 4)).toBe(true);
+  });
+
+  it("leaves a sentence without importance untouched", () => {
+    const bbox = { page: 0, x0: 0, y0: 0, x1: 1, y1: 1 };
+
+    expect(bboxesOnPage([{ bboxes: [bbox] }], 0)[0]).toBe(bbox);
+  });
+});

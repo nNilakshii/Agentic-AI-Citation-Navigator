@@ -68,3 +68,43 @@ export const paper = {
 };
 
 export const samples = ["attention-is-all-you-need.pdf", "bert.pdf"];
+
+/**
+ * A ReadingPath over `paper`, shaped exactly like the backend's response.
+ * Two of the three sentences, on two different pages, with different
+ * importances — enough to exercise the join, the per-page split and the
+ * intensity classes.
+ */
+export const readingPath = {
+  paper_id: paper.paper_id,
+  parser_version: "1",
+  ranker_version: "1",
+  goal: "skim",
+  model: "fake-model",
+  n_sentences_considered: 3,
+  n_hallucinated_ids: 0,
+  n_batches: 1,
+  n_batches_failed: 0,
+  items: [
+    {
+      sentence_id: "s00001",
+      start_char: 19,
+      end_char: 38,
+      page: 0,
+      section_id: 1,
+      text: "Abstract text here.",
+      importance: 5,
+      why: "states the core claim",
+    },
+    {
+      sentence_id: "s00002",
+      start_char: 39,
+      end_char: 65,
+      page: 1,
+      section_id: 2,
+      text: "Introduction text follows.",
+      importance: 2,
+      why: "background framing",
+    },
+  ],
+};

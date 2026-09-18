@@ -77,3 +77,21 @@ export function getPaper(paperId) {
 export function pdfUrl(paperId) {
   return `${BASE}/papers/${paperId}/pdf`;
 }
+
+/**
+ * Build (or fetch the cached) goal-conditioned reading path for a paper.
+ *
+ * POST because a cache miss ranks the paper, which costs LLM quota and takes
+ * seconds; the backend serves a cached path without calling the model.
+ *
+ * @param {string} paperId
+ * @param {string} goalId - "skim" | "in-depth" | "critique"
+ * @param {{force?: boolean}} [options]
+ */
+export function fetchReadingPath(paperId, goalId, { force = false } = {}) {
+  const query = new URLSearchParams({ goal: goalId });
+  if (force) query.set("force", "true");
+  return request(`${BASE}/papers/${paperId}/reading-path?${query}`, {
+    method: "POST",
+  });
+}

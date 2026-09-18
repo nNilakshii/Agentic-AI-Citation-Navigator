@@ -44,7 +44,12 @@ export function bboxToCss(bbox, scale) {
 /**
  * The bboxes belonging to one page, flattened across sentences.
  *
- * @param {Array<{bboxes: Array<object>}>} sentences
+ * Each returned bbox carries its sentence's `importance` when there is one, so
+ * the reading path (1.7) can vary highlight intensity without the layer having
+ * to look anything up. Sentences without an importance — a plain span
+ * highlight — come back unchanged apart from the copy.
+ *
+ * @param {Array<{bboxes: Array<object>, importance?: number}>} sentences
  * @param {number} pageIndex - 0-based.
  * @returns {Array<object>} Every bbox on that page.
  */
@@ -52,7 +57,12 @@ export function bboxesOnPage(sentences, pageIndex) {
   const found = [];
   for (const sentence of sentences ?? []) {
     for (const bbox of sentence.bboxes ?? []) {
-      if (bbox.page === pageIndex) found.push(bbox);
+      if (bbox.page !== pageIndex) continue;
+      found.push(
+        sentence.importance === undefined
+          ? bbox
+          : { ...bbox, importance: sentence.importance },
+      );
     }
   }
   return found;
