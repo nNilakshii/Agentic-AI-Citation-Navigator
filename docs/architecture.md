@@ -158,6 +158,34 @@ limiter, with retry-and-backoff on 429.
 Combined with the response cache below, a re-run of the eval harness should issue close to
 zero live requests — only genuinely new papers reach the network.
 
+### Gemini free tier: 5 requests/min shapes how a paper is batched
+
+Measured 2026-09-05 while building 1.6, against `gemini-3.6-flash`: the free tier allows
+**5 `generateContent` requests per minute per model**, and a 429 carries a `retryDelay` of
+~45s. Two things follow.
+
+**1. One paper should be one request.** A 15-page paper is ~300 rankable sentences. Early
+1.6 used a 200-sentence batch, so every paper took two calls — and ranking all three goals
+took six, over the limit. The first batch was rate-limited every time, which silently
+dropped the *front half of the paper*: no abstract, no introduction, no method. The ranking
+looked plausible because every sentence in it was real. Batch size is now 400, so a typical
+paper is a single call.
+
+**2. A partial result must never be cached.** This is the subtler half. Batches fail
+independently, and a path missing one batch is indistinguishable from a complete one by
+inspection — the sentences it contains are genuine, there are just fewer of them. Caching
+it would turn a transient 429 into a permanently truncated reading path for that paper and
+goal. `ReadingPath.n_batches_failed` records this and the endpoint caches only when it is
+zero, so a rate-limited run costs latency rather than correctness.
+
+Retries honour the server's own `retryDelay` rather than guessing, with jitter so batches
+limited together don't retry in lockstep and trip the same window again.
+
+Note the model itself is not stable ground: `gemini-2.5-flash` still appears in
+`models.list()` but returns 404 for new keys, pointing at `gemini-3.6-flash`. The model
+name is a setting (`GEMINI_MODEL`), not a constant, and `scripts/check_env.py` reports what
+a given key can actually reach.
+
 ### Caching: filesystem, content-addressed
 
 Every expensive or rate-limited result is cached to disk under `data/cache/` (gitignored):

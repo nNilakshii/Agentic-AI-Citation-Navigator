@@ -16,6 +16,17 @@ class Settings(BaseSettings):
     )
 
     gemini_api_key: str | None = None
+    #: Discovered via scripts/check_env.py. Flash is the ranking workhorse:
+    #: cheap, fast, and 1.6 is a selection task rather than a reasoning one.
+    gemini_model: str = "gemini-3.6-flash"
+    #: 0 disables Gemini's thinking tokens. See app/llm/client.py.
+    llm_thinking_budget: int = 0
+    #: Parallel LLM calls. Measured free-tier limit for gemini-3.6-flash is
+    #: 5 requests/min, so overlapping more than a pair just rate-limits us.
+    llm_max_concurrency: int = 2
+    #: Attempts per call, including the first. Free-tier 429s ask for a ~45s
+    #: wait, so two retries covers a quota window without hanging the request.
+    llm_max_attempts: int = 3
     anthropic_api_key: str | None = None
     openai_api_key: str | None = None
     semantic_scholar_api_key: str | None = None

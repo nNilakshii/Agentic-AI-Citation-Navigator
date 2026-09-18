@@ -12,8 +12,12 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
 
 from app.cache import PaperStore
+from app.core.goals import GOAL_SPECS
 from app.core.pdf_parser import PARSER_VERSION, paper_id_for, parse_pdf
+from app.core.reading_path import RANKER_VERSION, build_reading_path
+from app.llm.client import LLMClient, LLMError, LLMNotConfigured, get_llm_client
 from app.models.paper import ParsedPaper, PaperSummary, Section
+from app.models.reading import ReadingGoal, ReadingPath
 
 router = APIRouter()
 
@@ -103,6 +107,90 @@ def get_pdf(paper_id: str, store: PaperStore = Depends(get_store)) -> Response:
         media_type="application/pdf",
         headers={"Cache-Control": "public, max-age=31536000, immutable"},
     )
+
+
+@router.get(
+    "/goals",
+    summary="The reading goals and what each one surfaces",
+)
+def list_goals() -> list[dict]:
+    """What the ranker means by each goal.
+
+    Exposed so the frontend can stop hardcoding its copy (1.9) and so the
+    wording driving the ranking is inspectable without reading the source.
+    """
+    return [
+        {
+            "id": spec.goal.value,
+            "label": spec.label,
+            "criteria": spec.criteria,
+            "excludes": spec.exclude,
+            "target_fraction": spec.target_fraction,
+        }
+        for spec in GOAL_SPECS.values()
+    ]
+
+
+@router.post(
+    "/papers/{paper_id}/reading-path",
+    response_model=ReadingPath,
+    summary="Rank a paper's sentences for a reading goal (task 1.6)",
+)
+async def reading_path(
+    paper_id: str,
+    goal: ReadingGoal = Query(description="skim | in-depth | critique"),
+    force: bool = Query(False, description="Re-rank even if a cached path exists"),
+    store: PaperStore = Depends(get_store),
+    client: LLMClient = Depends(get_llm_client),
+) -> ReadingPath:
+    """Return the goal-conditioned reading path, ranking it if not cached.
+
+    Ranking costs LLM quota and takes seconds, so results are cached per
+    (paper, parser version, goal, ranker version) and re-served thereafter.
+    """
+    paper = _load_or_404(paper_id, store)
+
+    if not force:
+        cached = store.load_reading_path(paper_id, PARSER_VERSION, goal, RANKER_VERSION)
+        if cached is not None:
+            return cached
+
+    try:
+        result = await build_reading_path(paper, goal, client)
+    except LLMNotConfigured as error:
+        # Configuration, not a transient fault — say so rather than a blank 502.
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except LLMError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+    # A path missing a batch looks exactly like a complete one — the sentences
+    # in it are real, there are just fewer of them. Caching it would turn a
+    # transient rate limit into a permanently truncated reading path.
+    if result.is_complete:
+        store.save_reading_path(result)
+    return result
+
+
+@router.get(
+    "/papers/{paper_id}/reading-path",
+    response_model=ReadingPath,
+    summary="The cached reading path, if one has been built",
+)
+def get_reading_path(
+    paper_id: str,
+    goal: ReadingGoal = Query(description="skim | in-depth | critique"),
+    store: PaperStore = Depends(get_store),
+) -> ReadingPath:
+    """Read-only counterpart to the POST — never spends LLM quota."""
+    _load_or_404(paper_id, store)
+    cached = store.load_reading_path(paper_id, PARSER_VERSION, goal, RANKER_VERSION)
+    if cached is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"no reading path for {paper_id} and goal '{goal.value}'; "
+            "POST to this URL to build one",
+        )
+    return cached
 
 
 # --- helpers -----------------------------------------------------------
