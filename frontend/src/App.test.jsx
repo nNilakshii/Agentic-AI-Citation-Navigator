@@ -44,10 +44,18 @@ async function renderApp() {
   return screen.findByRole("button", { name: "attention is all you need" });
 }
 
+/**
+ * Open a paper and get past the goal modal (1.5), which every test about the
+ * reader underneath it has to do first.
+ */
 async function openSamplePaper() {
   const sample = await renderApp();
   await userEvent.click(sample);
-  await screen.findByText("Attention Is All You Need");
+  await screen.findByRole("dialog");
+  await userEvent.click(screen.getByRole("button", { name: /^Start reading/ }));
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
 }
 
 describe("opening a paper", () => {
@@ -84,6 +92,8 @@ describe("opening a paper", () => {
 
     await waitFor(() => expect(api.uploadPaper).toHaveBeenCalledWith(file));
     expect(await screen.findByText("Attention Is All You Need")).toBeInTheDocument();
+    // An uploaded paper asks for a goal just like a sample does.
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 
   it("shows nothing is open before a paper is chosen", async () => {
@@ -94,11 +104,10 @@ describe("opening a paper", () => {
 
 describe("the outline", () => {
   it("appears only once a paper is open", async () => {
-    const sample = await renderApp();
+    await renderApp();
     expect(screen.queryByText("Outline")).not.toBeInTheDocument();
 
-    await userEvent.click(sample);
-    await screen.findByText("Attention Is All You Need");
+    await openSamplePaper();
 
     expect(screen.getByText("Outline")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /1 Introduction/ })).toBeInTheDocument();
@@ -191,7 +200,7 @@ describe("the outline", () => {
   });
 });
 
-describe("the reading goal", () => {
+describe("the reading goal (1.5)", () => {
   it("defaults to Skim and is pressed", async () => {
     await renderApp();
     expect(screen.getByRole("button", { name: "Skim" })).toHaveAttribute(
@@ -200,7 +209,7 @@ describe("the reading goal", () => {
     );
   });
 
-  it("switches when another goal is chosen", async () => {
+  it("switches when another goal is chosen in the sidebar", async () => {
     await renderApp();
 
     await userEvent.click(screen.getByRole("button", { name: "Critique" }));
@@ -213,6 +222,109 @@ describe("the reading goal", () => {
       "aria-pressed",
       "false",
     );
+  });
+
+  it("does not ask for a goal before a paper is open", async () => {
+    await renderApp();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("asks for a goal when a paper opens", async () => {
+    const sample = await renderApp();
+
+    await userEvent.click(sample);
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    // The paper being opened is named, so the choice has context.
+    expect(dialog).toHaveTextContent("Attention Is All You Need");
+  });
+
+  it("applies the goal confirmed in the modal", async () => {
+    const sample = await renderApp();
+    await userEvent.click(sample);
+    await screen.findByRole("dialog");
+
+    await userEvent.click(screen.getByRole("radio", { name: /Critique/ }));
+    await userEvent.click(screen.getByRole("button", { name: /^Start reading/ }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole("button", { name: "Critique" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("leaves the goal alone when the modal is dismissed", async () => {
+    const sample = await renderApp();
+    await userEvent.click(sample);
+    await screen.findByRole("dialog");
+
+    // Select Critique but back out — the choice was never confirmed.
+    await userEvent.click(screen.getByRole("radio", { name: /Critique/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Not now" }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole("button", { name: "Skim" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("closes on Escape without changing the goal", async () => {
+    const sample = await renderApp();
+    await userEvent.click(sample);
+    await screen.findByRole("dialog");
+
+    await userEvent.click(screen.getByRole("radio", { name: /Critique/ }));
+    await userEvent.keyboard("{Escape}");
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole("button", { name: "Skim" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("asks again for the next paper, since it is a new reading session", async () => {
+    await openSamplePaper();
+
+    await userEvent.click(screen.getByRole("button", { name: "bert" }));
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("can be reopened from the sidebar once a paper is open", async () => {
+    await openSamplePaper();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "What do these mean?" }),
+    );
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("offers no reopen link before any paper is open", async () => {
+    await renderApp();
+    expect(
+      screen.queryByRole("button", { name: "What do these mean?" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not ask for a goal when the parse failed", async () => {
+    api.parseSample.mockRejectedValue(new Error("boom"));
+    const sample = await renderApp();
+
+    await userEvent.click(sample);
+
+    await screen.findByRole("alert");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
 

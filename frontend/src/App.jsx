@@ -1,23 +1,24 @@
 /**
- * AURA Citation Navigator — reader shell (tasks 1.3, 1.4).
+ * AURA Citation Navigator — reader shell (tasks 1.3, 1.4, 1.5).
  *
  * Sidebar: pick a paper, pick a reading goal, navigate the section outline.
  * Main:    the PDF, scrolling continuously, with a highlight overlay per page.
  *
- * The reading goal is captured but not yet acted on — goal-conditioned ranking
- * is task 1.6, and it will feed `highlightSentences` here without the viewer
- * needing to change.
+ * Opening a paper asks for a reading goal (1.5). The goal is held here as a
+ * stable id and is not yet acted on — goal-conditioned ranking is task 1.6,
+ * and it will feed `highlightSentences` without the viewer needing to change.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import GoalModal from "./components/GoalModal.jsx";
+import GoalPicker from "./components/GoalPicker.jsx";
 import Outline from "./components/Outline.jsx";
 import PaperPicker from "./components/PaperPicker.jsx";
 import PdfViewer from "./components/PdfViewer.jsx";
 import * as api from "./lib/api.js";
+import { DEFAULT_GOAL_ID } from "./lib/goals.js";
 import { paperSubtitle, sectionAt } from "./lib/outline.js";
-
-export const READING_GOALS = ["Skim", "In-depth", "Critique"];
 
 /**
  * How long a jump is given to finish before scroll tracking is believed again.
@@ -27,7 +28,8 @@ export const READING_GOALS = ["Skim", "In-depth", "Critique"];
 const JUMP_SETTLE_MS = 1200;
 
 export default function App() {
-  const [goal, setGoal] = useState(READING_GOALS[0]);
+  const [goalId, setGoalId] = useState(DEFAULT_GOAL_ID);
+  const [askingGoal, setAskingGoal] = useState(false);
   const [samples, setSamples] = useState([]);
   const [paper, setPaper] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -53,6 +55,9 @@ export default function App() {
       setSelectedSection(null);
       setActiveSectionId(parsed.sections?.[0]?.id ?? null);
       setScrollToPage({ page: 0 });
+      // A new paper is a new reading session, so the goal is asked again
+      // rather than inherited silently from the last one.
+      setAskingGoal(true);
     } catch (cause) {
       setError(cause.message);
     } finally {
@@ -117,25 +122,11 @@ export default function App() {
           onUpload={(file) => load(() => api.uploadPaper(file))}
         />
 
-        <section className="sidebar__section">
-          <p className="picker__label">Reading goal</p>
-          <div className="goal-picker" role="group" aria-label="Reading goal">
-            {READING_GOALS.map((option) => (
-              <button
-                key={option}
-                type="button"
-                className={option === goal ? "active" : ""}
-                aria-pressed={option === goal}
-                onClick={() => setGoal(option)}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
-          <p className="sidebar__hint">
-            Goal-adaptive highlighting arrives in task 1.6.
-          </p>
-        </section>
+        <GoalPicker
+          goalId={goalId}
+          onChange={setGoalId}
+          onReopen={paper ? () => setAskingGoal(true) : undefined}
+        />
 
         {paper && (
           <section className="sidebar__section sidebar__section--grow">
@@ -171,6 +162,18 @@ export default function App() {
           onPageChange={handlePageChange}
         />
       </main>
+
+      {askingGoal && paper && (
+        <GoalModal
+          paperTitle={paper.source?.title}
+          currentGoalId={goalId}
+          onConfirm={(chosen) => {
+            setGoalId(chosen);
+            setAskingGoal(false);
+          }}
+          onDismiss={() => setAskingGoal(false)}
+        />
+      )}
     </div>
   );
 }
