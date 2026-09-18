@@ -32,6 +32,34 @@ by `paper_id` *and* `parser_version`.
 
 Add `?force=true` to either `POST` to bypass the cache and re-parse.
 
+## Reading path — goal-conditioned ranking (Phase 1.6)
+
+Ranks a paper's sentences for a reading goal (`skim` | `in-depth` | `critique`) and
+returns the ones worth reading, each with a span, an importance and a one-line reason.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/reader/goals` | The goals and what each one surfaces |
+| `POST` | `/api/reader/papers/{paper_id}/reading-path?goal=skim` | Rank (cached; `&force=true` to re-rank) |
+| `GET` | `/api/reader/papers/{paper_id}/reading-path?goal=skim` | The cached path — never spends LLM quota |
+
+```bash
+curl -X POST "localhost:8000/api/reader/papers/$PAPER_ID/reading-path?goal=skim" \
+  | python3 -c 'import json,sys; d=json.load(sys.stdin); \
+      [print(f"[{i[\"importance\"]}] p{i[\"page\"]+1} {i[\"text\"][:80]}") for i in d["items"]]'
+```
+
+**The model selects, it never writes.** It sees numbered sentences and may answer only
+with those numbers; each id is checked against the paper and dropped if unknown
+(`n_hallucinated_ids` counts these), and every span and text is echoed from the parse. So
+a reading path cannot contain a sentence the paper does not have.
+
+Ranking costs LLM quota, so paths are cached per (paper, parser version, goal, ranker
+version) — but **only when complete**. If a batch fails, `n_batches_failed` is non-zero
+and the result is served without being cached, so a transient rate limit cannot leave a
+permanently truncated path behind. Free-tier Gemini allows 5 requests/min; see
+`docs/architecture.md`.
+
 ```bash
 # parse a sample paper and read off its outline
 curl -X POST localhost:8000/api/reader/papers/samples/attention-is-all-you-need.pdf \
