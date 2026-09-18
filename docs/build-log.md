@@ -156,6 +156,47 @@ hardcode a count.
 
 ---
 
+## Task 1.7 — rendering the reading path
+
+### The path has no geometry
+
+`PathItem` carries `sentence_id` and offsets but **no bboxes** — deliberately, since spans
+are the currency and the UI resolves them. So nothing could be drawn until the path was
+joined back to the parse by `sentence_id` (`lib/readingPath.js`). Worth knowing before
+2.12 tries to highlight a cited span: it will need the same join against the *cited*
+paper's parse.
+
+### Ranking fired while the goal modal was still open
+
+Found by watching a cold run in the browser: the fetch effect keyed on `paper`, and the
+paper is set before the modal is confirmed. So opening a paper immediately ranked the
+*default* goal, and picking anything else ranked again — **two LLM calls per opened
+paper** against a five-per-minute budget, one of them always discarded.
+
+Fixed by gating the effect on `askingGoal`. The modal is the selection step; ranking
+before the reader has chosen is guessing.
+
+### Two highlight systems would have competed
+
+Up to 1.6, clicking a section painted its sentences — a stand-in to prove the
+offset→bbox chain. Left in place it would have overlaid the reading path with a second,
+unrelated highlight. Section clicks now only jump. Two tests asserting the old behaviour
+were rewritten rather than deleted, so the change is recorded rather than silent.
+
+### A long wait looks like a hang
+
+With quota already exhausted from testing, a cold ranking retried twice — 47s then 59s,
+both delays dictated by the server — and sat on "Finding your reading path…" for about
+two minutes before succeeding. The retry did its job, but the UI gives no sign that it is
+waiting on a rate limit rather than stuck.
+
+Normal cold latency is 4–5s, so this is not urgent, but the message should distinguish
+"working" from "backing off" in 1.9.
+
+**Tests: 96 → 129.**
+
+---
+
 ## Patterns worth carrying forward
 
 1. **Unit tests caught the logic; only a live run caught the damage.** Every bug in B and C
@@ -167,4 +208,8 @@ hardcode a count.
 4. **Check the status code the user sees, not the exception raised.** The 502/503 chain was
    three plausible-looking links.
 5. **Free-tier quotas are a design input, not an operational detail.** 5 req/min dictated
-   batch size, concurrency and retry policy — see `architecture.md`.
+   batch size, concurrency and retry policy in 1.6, and in 1.7 it decided *when* to fetch
+   — see `architecture.md`.
+6. **Watch a cold run, not just a warm one.** The wasted duplicate call in 1.7 was
+   invisible with everything cached; it only showed up on a paper that had never been
+   ranked.

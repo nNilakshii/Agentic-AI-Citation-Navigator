@@ -1,12 +1,12 @@
 /**
- * AURA Citation Navigator — reader shell (tasks 1.3, 1.4, 1.5).
+ * AURA Citation Navigator — reader shell (tasks 1.3-1.7).
  *
  * Sidebar: pick a paper, pick a reading goal, navigate the section outline.
- * Main:    the PDF, scrolling continuously, with a highlight overlay per page.
+ * Main:    the PDF, scrolling continuously, with the reading path highlighted.
  *
- * Opening a paper asks for a reading goal (1.5). The goal is held here as a
- * stable id and is not yet acted on — goal-conditioned ranking is task 1.6,
- * and it will feed `highlightSentences` without the viewer needing to change.
+ * Opening a paper asks for a reading goal (1.5), which is ranked into a reading
+ * path by the backend (1.6) and drawn over the pages here (1.7). Changing the
+ * goal re-fetches; the backend caches per goal, so switching back is instant.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -16,9 +16,11 @@ import GoalPicker from "./components/GoalPicker.jsx";
 import Outline from "./components/Outline.jsx";
 import PaperPicker from "./components/PaperPicker.jsx";
 import PdfViewer from "./components/PdfViewer.jsx";
+import ReadingPathStatus from "./components/ReadingPathStatus.jsx";
 import * as api from "./lib/api.js";
 import { DEFAULT_GOAL_ID } from "./lib/goals.js";
 import { paperSubtitle, sectionAt } from "./lib/outline.js";
+import { pathSentences } from "./lib/readingPath.js";
 
 /**
  * How long a jump is given to finish before scroll tracking is believed again.
@@ -37,6 +39,12 @@ export default function App() {
   const [scrollToPage, setScrollToPage] = useState(null);
   const [activeSectionId, setActiveSectionId] = useState(null);
   const [selectedSection, setSelectedSection] = useState(null);
+  const [readingPath, setReadingPath] = useState(null);
+  const [pathBusy, setPathBusy] = useState(false);
+  const [pathError, setPathError] = useState(null);
+  // Bumped to re-run the ranking effect. Setting goalId to its current value
+  // would not: React bails out of a state update that changes nothing.
+  const [pathAttempt, setPathAttempt] = useState(0);
   const jumpedAt = useRef(0);
 
   useEffect(() => {
@@ -52,6 +60,8 @@ export default function App() {
     try {
       const parsed = await loader();
       setPaper(parsed);
+      setReadingPath(null);
+      setPathError(null);
       setSelectedSection(null);
       setActiveSectionId(parsed.sections?.[0]?.id ?? null);
       setScrollToPage({ page: 0 });
@@ -64,6 +74,41 @@ export default function App() {
       setBusy(false);
     }
   }, []);
+
+  // Rank the paper for the current goal. Re-runs when either changes; the
+  // backend caches per (paper, goal), so switching back to a goal already seen
+  // returns immediately without spending quota.
+  //
+  // Nothing is ranked while the goal modal is open. Ranking on paper load
+  // would spend a call on the default goal, and a second on whatever the
+  // reader then picks — two LLM calls against a 5-per-minute budget for one
+  // opened paper.
+  useEffect(() => {
+    if (!paper || askingGoal) return undefined;
+
+    // A goal switched twice in quick succession must not let the slower, older
+    // request overwrite the newer one's highlights.
+    let current = true;
+    setPathBusy(true);
+    setPathError(null);
+    api
+      .fetchReadingPath(paper.paper_id, goalId)
+      .then((path) => {
+        if (current) setReadingPath(path);
+      })
+      .catch((cause) => {
+        if (!current) return;
+        setReadingPath(null);
+        setPathError(cause.message);
+      })
+      .finally(() => {
+        if (current) setPathBusy(false);
+      });
+
+    return () => {
+      current = false;
+    };
+  }, [paper, goalId, askingGoal, pathAttempt]);
 
   const handleSelectSection = useCallback((section) => {
     setSelectedSection(section);
@@ -97,14 +142,13 @@ export default function App() {
     [paper, selectedSection],
   );
 
-  // Until goal-conditioned ranking exists (1.6), highlighting the selected
-  // section's sentences is what proves the offset -> bbox chain end to end.
-  const highlightSentences = useMemo(() => {
-    if (!paper || !selectedSection) return [];
-    return paper.sentences.filter(
-      (sentence) => sentence.section_id === selectedSection.id,
-    );
-  }, [paper, selectedSection]);
+  // The reading path is now what gets highlighted. Clicking a section still
+  // jumps to it, but no longer paints it — two highlight systems competing for
+  // the same page read as noise.
+  const highlightSentences = useMemo(
+    () => pathSentences(paper, readingPath),
+    [paper, readingPath],
+  );
 
   return (
     <div className="app">
@@ -127,6 +171,15 @@ export default function App() {
           onChange={setGoalId}
           onReopen={paper ? () => setAskingGoal(true) : undefined}
         />
+
+        {paper && (
+          <ReadingPathStatus
+            path={readingPath}
+            busy={pathBusy}
+            error={pathError}
+            onRetry={() => setPathAttempt((n) => n + 1)}
+          />
+        )}
 
         {paper && (
           <section className="sidebar__section sidebar__section--grow">

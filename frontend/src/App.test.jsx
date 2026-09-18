@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App.jsx";
-import { paper, samples } from "./test/fixtures.js";
+import { paper, readingPath, samples } from "./test/fixtures.js";
 
 vi.mock("./lib/api.js");
 
@@ -36,6 +36,7 @@ beforeEach(() => {
   api.parseSample.mockResolvedValue(paper);
   api.uploadPaper.mockResolvedValue(paper);
   api.pdfUrl.mockImplementation((id) => `/api/reader/papers/${id}/pdf`);
+  api.fetchReadingPath.mockResolvedValue(readingPath);
 });
 
 /** Render and let the on-mount samples fetch settle before asserting. */
@@ -124,19 +125,20 @@ describe("the outline", () => {
     );
   });
 
-  it("highlights the selected section's sentences", async () => {
+  it("jumps to a section without painting it", async () => {
+    // Up to 1.6 clicking a section highlighted its sentences, as a stand-in
+    // for the ranker. The reading path owns highlighting now, and two
+    // highlight systems on one page read as noise.
     await openSamplePaper();
-    expect(screen.getByTestId("pdf-viewer-stub")).toHaveAttribute(
-      "data-highlight-count",
-      "0",
-    );
+    const before = screen
+      .getByTestId("pdf-viewer-stub")
+      .getAttribute("data-highlight-count");
 
     await userEvent.click(screen.getByRole("button", { name: /Abstract/ }));
 
-    // Exactly the one sentence whose section_id is the Abstract's.
     expect(screen.getByTestId("pdf-viewer-stub")).toHaveAttribute(
       "data-highlight-count",
-      "1",
+      before,
     );
   });
 
@@ -192,10 +194,6 @@ describe("the outline", () => {
     );
     expect(screen.getByRole("button", { name: /Front matter/ })).not.toHaveAttribute(
       "aria-current",
-    );
-    expect(screen.getByTestId("pdf-viewer-stub")).toHaveAttribute(
-      "data-highlight-count",
-      "1",
     );
   });
 });
@@ -325,6 +323,171 @@ describe("the reading goal (1.5)", () => {
 
     await screen.findByRole("alert");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
+describe("the reading path (1.7)", () => {
+  it("ranks the paper for the chosen goal once it opens", async () => {
+    await openSamplePaper();
+
+    expect(api.fetchReadingPath).toHaveBeenCalledWith(paper.paper_id, "skim");
+  });
+
+  it("does not rank while the goal is still being chosen", async () => {
+    // Ranking on paper load would spend one call on the default goal and
+    // another on whatever the reader picks — two calls against a budget of
+    // five per minute, for one opened paper.
+    const sample = await renderApp();
+
+    await userEvent.click(sample);
+    await screen.findByRole("dialog");
+
+    expect(api.fetchReadingPath).not.toHaveBeenCalled();
+  });
+
+  it("ranks only the confirmed goal, not the default as well", async () => {
+    const sample = await renderApp();
+    await userEvent.click(sample);
+    await screen.findByRole("dialog");
+
+    await userEvent.click(screen.getByRole("radio", { name: /Critique/ }));
+    await userEvent.click(screen.getByRole("button", { name: /^Start reading/ }));
+
+    await waitFor(() => expect(api.fetchReadingPath).toHaveBeenCalledTimes(1));
+    expect(api.fetchReadingPath).toHaveBeenCalledWith(paper.paper_id, "critique");
+  });
+
+  it("ranks the current goal when the modal is dismissed", async () => {
+    const sample = await renderApp();
+    await userEvent.click(sample);
+    await screen.findByRole("dialog");
+
+    await userEvent.click(screen.getByRole("button", { name: "Not now" }));
+
+    await waitFor(() =>
+      expect(api.fetchReadingPath).toHaveBeenCalledWith(paper.paper_id, "skim"),
+    );
+  });
+
+  it("highlights the path's sentences, not the selected section's", async () => {
+    await openSamplePaper();
+
+    // Both items in the fixture path resolve to real sentences.
+    expect(screen.getByTestId("pdf-viewer-stub")).toHaveAttribute(
+      "data-highlight-count",
+      "2",
+    );
+  });
+
+  it("does not rank anything before a paper is open", async () => {
+    await renderApp();
+    expect(api.fetchReadingPath).not.toHaveBeenCalled();
+  });
+
+  it("re-ranks when the goal changes", async () => {
+    await openSamplePaper();
+    api.fetchReadingPath.mockClear();
+
+    await userEvent.click(screen.getByRole("button", { name: "Critique" }));
+
+    await waitFor(() =>
+      expect(api.fetchReadingPath).toHaveBeenCalledWith(paper.paper_id, "critique"),
+    );
+  });
+
+  it("re-ranks for the goal confirmed in the modal", async () => {
+    const sample = await renderApp();
+    await userEvent.click(sample);
+    await screen.findByRole("dialog");
+
+    await userEvent.click(screen.getByRole("radio", { name: /In-depth/ }));
+    await userEvent.click(screen.getByRole("button", { name: /^Start reading/ }));
+
+    await waitFor(() =>
+      expect(api.fetchReadingPath).toHaveBeenCalledWith(paper.paper_id, "in-depth"),
+    );
+  });
+
+  it("says how much of the paper is highlighted", async () => {
+    await openSamplePaper();
+
+    expect(await screen.findByText(/2 of 3 sentences/)).toBeInTheDocument();
+  });
+
+  it("shows progress while ranking, since it is a slow call", async () => {
+    let release;
+    api.fetchReadingPath.mockReturnValue(
+      new Promise((resolve) => {
+        release = () => resolve(readingPath);
+      }),
+    );
+    const sample = await renderApp();
+    await userEvent.click(sample);
+    await screen.findByRole("dialog");
+    await userEvent.click(screen.getByRole("button", { name: /^Start reading/ }));
+
+    expect(await screen.findByText(/Finding your reading path/)).toBeInTheDocument();
+
+    release();
+    await waitFor(() =>
+      expect(screen.queryByText(/Finding your reading path/)).not.toBeInTheDocument(),
+    );
+  });
+
+  it("reports a ranking failure without breaking the reader", async () => {
+    api.fetchReadingPath.mockRejectedValue(new Error("quota exhausted"));
+
+    await openSamplePaper();
+
+    expect(await screen.findByText("quota exhausted")).toBeInTheDocument();
+    // The PDF is still there; only the highlights are missing.
+    expect(screen.getByTestId("pdf-viewer-stub")).toHaveAttribute(
+      "data-highlight-count",
+      "0",
+    );
+  });
+
+  it("can retry a failed ranking", async () => {
+    api.fetchReadingPath.mockRejectedValueOnce(new Error("quota exhausted"));
+    await openSamplePaper();
+    await screen.findByText("quota exhausted");
+
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(await screen.findByText(/2 of 3 sentences/)).toBeInTheDocument();
+  });
+
+  it("warns when part of the paper was never ranked", async () => {
+    // A truncated path is indistinguishable from a complete one by looking at
+    // it, so the reader has to be told. See docs/build-log.md.
+    api.fetchReadingPath.mockResolvedValue({ ...readingPath, n_batches_failed: 1 });
+
+    await openSamplePaper();
+
+    expect(await screen.findByText(/could not be ranked/)).toBeInTheDocument();
+  });
+
+  it("says so when nothing matched the goal", async () => {
+    api.fetchReadingPath.mockResolvedValue({ ...readingPath, items: [] });
+
+    await openSamplePaper();
+
+    expect(await screen.findByText(/Nothing in this paper matched/)).toBeInTheDocument();
+  });
+
+  it("drops the previous paper's highlights when another is opened", async () => {
+    await openSamplePaper();
+    api.fetchReadingPath.mockReturnValue(new Promise(() => {})); // never settles
+
+    await userEvent.click(screen.getByRole("button", { name: "bert" }));
+
+    // The old path must not sit over the new paper while the new one loads.
+    await waitFor(() =>
+      expect(screen.getByTestId("pdf-viewer-stub")).toHaveAttribute(
+        "data-highlight-count",
+        "0",
+      ),
+    );
   });
 });
 
