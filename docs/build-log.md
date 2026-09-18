@@ -1,0 +1,170 @@
+# Build log — problems hit, and what they cost
+
+A running record of what actually went wrong while building, kept because most of it is
+invisible in the final diff. Two audiences: me in three months, and the Phase 4 write-up,
+where "what broke and why" is more interesting than "what shipped".
+
+Append a section per task. Keep the failure *and* the reason it was not obvious.
+
+---
+
+## Task 1.5 — goal-selection modal
+
+Clean, in the end: no runtime bugs, tests and the browser check passed on the first run.
+The friction was elsewhere.
+
+### The goal was a display string being used as state
+
+`READING_GOALS = ["Skim", "In-depth", "Critique"]`, with `"Skim"` itself stored in state.
+Fine while nothing consumed it; wrong the moment 1.6 needed to send it over the wire.
+Renaming a button label would have changed the API payload.
+
+Migrated to stable ids (`skim`, `in-depth`, `critique`) with labels as display-only. The
+cost of leaving it would have been a rename in 1.6 touching both ends at once.
+
+### Adding a required step rippled through 12 tests
+
+The modal made "open a paper" a two-step flow, so every existing test that opened a paper
+and then did something else had to dismiss it first. Not a bug — the behaviour genuinely
+changed — but worth noting that a small UI addition invalidated a shared test helper and
+about half the App suite.
+
+Handled by updating `openSamplePaper()` once rather than patching each test.
+
+### Focus restore can point at a detached node
+
+The sample button that opens the modal is often re-rendered while the paper parses, so
+the element captured on mount may no longer be in the document by the time the modal
+closes. Restoring focus to it silently does nothing, leaving focus on `<body>`.
+
+Guarded with `previous?.isConnected`. This was anticipated rather than observed — but it
+is the kind of thing that never shows up in jsdom and shows up intermittently for real
+keyboard users.
+
+### Two controls now share an accessible name
+
+Both the sidebar and the modal offer "Skim". Queries like `getByRole("button", {name:
+"Skim"})` would become ambiguous whenever the modal is open. Avoided by giving the modal
+options `role="radio"` and the sidebar `role="button"`, so tests address them distinctly.
+
+### Carried over from the go-live check: DOM text ≠ visible text
+
+Sample buttons read "Attention Is All You Need" on screen but contain
+`attention is all you need` in the DOM — the capitalisation is CSS `text-transform`. An
+exact-match click selector found nothing. Any future browser automation should match
+case-insensitively or on class.
+
+**Tests: 64 → 96.**
+
+---
+
+## Task 1.6 — goal-conditioned ranking
+
+Where the real problems were. Grouped by how they were found, because that turned out to
+be the pattern: the unit tests caught the logic bugs, and only running it against the live
+API caught the ones that mattered.
+
+### A. The provider is not stable ground
+
+**`gemini-2.5-flash` appears in `models.list()` but 404s for new keys.** The error text
+points at `gemini-3.6-flash`. So a model being listed does not mean it is callable, and
+the listing endpoint that `scripts/check_env.py` uses cannot be trusted as a availability
+check on its own.
+
+**Self-inflicted:** my first model probe printed only the first 12 matches and
+`gemini-3.6-flash` was not among them, so I picked a model that did not work and found out
+one round-trip later. Print the whole list, or grep it.
+
+**Transient `503 UNAVAILABLE`** ("high demand") happens independently of quota, mid-run,
+and is indistinguishable from a real outage without retrying.
+
+Consequence: the model name is a setting (`GEMINI_MODEL`), never a constant.
+
+### B. The silent truncation — the one that mattered
+
+Symptom: every goal returned sentences only from page 8 onward. No abstract, no
+introduction, no method section. `in-depth` returned 2 sentences against a budget of ~55,
+in 1.19s.
+
+Three compounding causes:
+
+1. **Free-tier Gemini allows 5 requests/min, not 10.** My config comment asserted 10; the
+   429 payload says 5, with a `retryDelay` around 45s.
+2. **200-sentence batches made a 306-sentence paper two calls**, so ranking three goals
+   took six requests and blew the window. Batch 1 — the front half of the paper — was
+   rate-limited essentially every time.
+3. **No retry.** A 429 just failed that batch.
+
+What made this genuinely dangerous rather than merely annoying: **the output looked
+correct**. Every sentence returned was real, correctly spanned, and sensibly chosen. There
+is nothing in a truncated reading path that says it is truncated. I only caught it by
+noticing the page numbers clustered at the back of the paper, then reading the server log.
+
+Fixes: batch size 200 → 400 so a typical paper is one call; retry honouring the server's
+own `retryDelay` with jitter; concurrency 3 → 2.
+
+**Lesson for Phase 2/3:** any batched LLM pipeline needs a completeness signal that is
+checked, not inferred from whether the output looks reasonable. Localization (2.5) and
+RAG over cited papers (3.4) will have the same shape.
+
+### C. A partial result was being cached — the worst of them
+
+Strictly worse than B, and a direct consequence of it. Batches fail independently, so a
+rate-limited run produced a path missing its first half — and that path was written to
+disk and served forever after. A transient 429 became a **permanent** truncation for that
+paper and goal, surviving restarts, invisible on inspection.
+
+Fix: `ReadingPath.n_batches_failed`, and the endpoint caches only when it is zero. A
+rate-limited run now costs latency instead of correctness.
+
+**Generalisable rule:** never cache a result assembled from independently-failing parts
+without recording whether all the parts arrived.
+
+### D. Error handling that hid its own errors
+
+A three-link chain, each found while fixing the previous one:
+
+1. **`LLMNotConfigured` subclasses `LLMError`.** When every batch failed I raised a fresh
+   generic `LLMError`, flattening the subclass — so a user with *no API key* got
+   `502 Bad Gateway` ("upstream is broken") instead of `503` ("set your key"). Fixed by
+   re-raising the original exception rather than wrapping.
+2. **`GeminiClient.__init__` raised on a missing key.** It is a FastAPI dependency, and an
+   exception during dependency resolution becomes an opaque 500 before any handler can map
+   it. Moved the check onto the call path.
+3. **That check then sat inside the `try` that wraps everything as `LLMError`** — so it
+   would have been re-swallowed immediately. Hoisted `_get_client()` above the `try`.
+
+Each link individually looks like reasonable code. Caught by one test asserting a 503,
+which is the argument for testing the status code a user actually sees rather than the
+exception type.
+
+### E. Testing problems
+
+**A test was hitting the real API.** `GeminiClient(api_key=None)` falls back to
+`settings.gemini_api_key`, so on a machine with a configured `.env` the "no key" test made
+a live call, burned quota, and passed for the wrong reason — while passing for the *right*
+reason on a machine without a key. Fixed by monkeypatching settings. The suite went
+**5.02s → 1.06s**, which is how obvious it is in hindsight.
+
+**One of my tests was simply wrong.** I asserted a 400-sentence paper yields 2 batches; it
+yielded 3, because the fixture set `section_id = i % 2`, alternating every sentence, and
+section-aware batching splits at the first boundary past 70% capacity. The code was right
+and the assertion was wrong — rewrote it to compute the expected batches rather than
+hardcode a count.
+
+**Tests: 52 → 123.**
+
+---
+
+## Patterns worth carrying forward
+
+1. **Unit tests caught the logic; only a live run caught the damage.** Every bug in B and C
+   passed a green suite of 101 tests. Fakes cannot model a rate limit.
+2. **Plausible-looking output is the dangerous failure mode.** A truncated ranking, a
+   partial RAG retrieval and a localizer that missed the right section all look like
+   ordinary results. Build an explicit completeness signal into each.
+3. **Never cache something that might be incomplete.** Cheap to record, expensive to debug.
+4. **Check the status code the user sees, not the exception raised.** The 502/503 chain was
+   three plausible-looking links.
+5. **Free-tier quotas are a design input, not an operational detail.** 5 req/min dictated
+   batch size, concurrency and retry policy — see `architecture.md`.
