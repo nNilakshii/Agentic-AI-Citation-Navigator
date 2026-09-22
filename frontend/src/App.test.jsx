@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -38,6 +38,17 @@ beforeEach(() => {
   api.pdfUrl.mockImplementation((id) => `/api/reader/papers/${id}/pdf`);
   api.fetchReadingPath.mockResolvedValue(readingPath);
 });
+
+/**
+ * An outline entry, scoped to the outline.
+ *
+ * The explanation panel (1.8) renders its passages as buttons too, and a
+ * section's title often appears inside one of its sentences — so an unscoped
+ * `getByRole("button", {name: /Abstract/})` matches both.
+ */
+function outlineItem(name) {
+  return within(document.querySelector(".outline")).getByRole("button", { name });
+}
 
 /** Render and let the on-mount samples fetch settle before asserting. */
 async function renderApp() {
@@ -111,13 +122,13 @@ describe("the outline", () => {
     await openSamplePaper();
 
     expect(screen.getByText("Outline")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /1 Introduction/ })).toBeInTheDocument();
+    expect(outlineItem(/1 Introduction/)).toBeInTheDocument();
   });
 
   it("asks the viewer to scroll to the section's page", async () => {
     await openSamplePaper();
 
-    await userEvent.click(screen.getByRole("button", { name: /1 Introduction/ }));
+    await userEvent.click(outlineItem(/1 Introduction/));
 
     expect(screen.getByTestId("pdf-viewer-stub")).toHaveAttribute(
       "data-scroll-page",
@@ -134,7 +145,7 @@ describe("the outline", () => {
       .getByTestId("pdf-viewer-stub")
       .getAttribute("data-highlight-count");
 
-    await userEvent.click(screen.getByRole("button", { name: /Abstract/ }));
+    await userEvent.click(outlineItem(/Abstract/));
 
     expect(screen.getByTestId("pdf-viewer-stub")).toHaveAttribute(
       "data-highlight-count",
@@ -145,9 +156,9 @@ describe("the outline", () => {
   it("marks the clicked section as current", async () => {
     await openSamplePaper();
 
-    await userEvent.click(screen.getByRole("button", { name: /1 Introduction/ }));
+    await userEvent.click(outlineItem(/1 Introduction/));
 
-    expect(screen.getByRole("button", { name: /1 Introduction/ })).toHaveAttribute(
+    expect(outlineItem(/1 Introduction/)).toHaveAttribute(
       "aria-current",
       "true",
     );
@@ -158,7 +169,7 @@ describe("the outline", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "scroll to page 1" }));
 
-    expect(screen.getByRole("button", { name: /1 Introduction/ })).toHaveAttribute(
+    expect(outlineItem(/1 Introduction/)).toHaveAttribute(
       "aria-current",
       "true",
     );
@@ -170,10 +181,10 @@ describe("the outline", () => {
     // every page in between.
     await openSamplePaper();
 
-    await userEvent.click(screen.getByRole("button", { name: /1.1 Motivation/ }));
+    await userEvent.click(outlineItem(/1.1 Motivation/));
     await userEvent.click(screen.getByRole("button", { name: "scroll to page 1" }));
 
-    expect(screen.getByRole("button", { name: /1.1 Motivation/ })).toHaveAttribute(
+    expect(outlineItem(/1.1 Motivation/)).toHaveAttribute(
       "aria-current",
       "true",
     );
@@ -185,14 +196,14 @@ describe("the outline", () => {
     // silently move the highlight off what the reader actually chose.
     await openSamplePaper();
 
-    await userEvent.click(screen.getByRole("button", { name: /Abstract/ }));
+    await userEvent.click(outlineItem(/Abstract/));
     await userEvent.click(screen.getByRole("button", { name: "scroll to page 0" }));
 
-    expect(screen.getByRole("button", { name: /Abstract/ })).toHaveAttribute(
+    expect(outlineItem(/Abstract/)).toHaveAttribute(
       "aria-current",
       "true",
     );
-    expect(screen.getByRole("button", { name: /Front matter/ })).not.toHaveAttribute(
+    expect(outlineItem(/Front matter/)).not.toHaveAttribute(
       "aria-current",
     );
   });
@@ -487,6 +498,58 @@ describe("the reading path (1.7)", () => {
         "data-highlight-count",
         "0",
       ),
+    );
+  });
+});
+
+describe("the explanation panel (1.8)", () => {
+  it("lists the reading path with its explanations", async () => {
+    await openSamplePaper();
+
+    expect(await screen.findByText("Your reading path")).toBeInTheDocument();
+    for (const item of readingPath.items) {
+      expect(screen.getByText(item.plain)).toBeInTheDocument();
+      // Grounding: the explanation never appears without its source sentence.
+      expect(screen.getByText(item.text)).toBeInTheDocument();
+    }
+  });
+
+  it("appears only once there is a path", async () => {
+    await renderApp();
+    expect(screen.queryByText("Your reading path")).not.toBeInTheDocument();
+  });
+
+  it("jumps the viewer to a passage when it is clicked", async () => {
+    await openSamplePaper();
+
+    // The second item lives on page 1 of the fixture paper.
+    await userEvent.click(screen.getByText(readingPath.items[1].plain));
+
+    expect(screen.getByTestId("pdf-viewer-stub")).toHaveAttribute(
+      "data-scroll-page",
+      "1",
+    );
+  });
+
+  it("marks the clicked passage as current", async () => {
+    await openSamplePaper();
+
+    await userEvent.click(screen.getByText(readingPath.items[0].plain));
+
+    const entries = document.querySelectorAll(".explain__item");
+    expect(entries[0]).toHaveAttribute("aria-current", "true");
+  });
+
+  it("clears the current passage when the goal changes", async () => {
+    // The new path is a different set of sentences, so a selection carried
+    // over from the old one would point at something no longer highlighted.
+    await openSamplePaper();
+    await userEvent.click(screen.getByText(readingPath.items[0].plain));
+
+    await userEvent.click(screen.getByRole("button", { name: "Critique" }));
+
+    await waitFor(() =>
+      expect(document.querySelector('[aria-current="true"].explain__item')).toBeNull(),
     );
   });
 });

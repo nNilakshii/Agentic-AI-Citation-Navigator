@@ -1,5 +1,5 @@
 /**
- * AURA Citation Navigator — reader shell (tasks 1.3-1.7).
+ * AURA Citation Navigator — reader shell (tasks 1.3-1.8).
  *
  * Sidebar: pick a paper, pick a reading goal, navigate the section outline.
  * Main:    the PDF, scrolling continuously, with the reading path highlighted.
@@ -7,10 +7,12 @@
  * Opening a paper asks for a reading goal (1.5), which is ranked into a reading
  * path by the backend (1.6) and drawn over the pages here (1.7). Changing the
  * goal re-fetches; the backend caches per goal, so switching back is instant.
+ * The right-hand panel lists that path with plain-language explanations (1.8).
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import ExplanationPanel from "./components/ExplanationPanel.jsx";
 import GoalModal from "./components/GoalModal.jsx";
 import GoalPicker from "./components/GoalPicker.jsx";
 import Outline from "./components/Outline.jsx";
@@ -18,7 +20,7 @@ import PaperPicker from "./components/PaperPicker.jsx";
 import PdfViewer from "./components/PdfViewer.jsx";
 import ReadingPathStatus from "./components/ReadingPathStatus.jsx";
 import * as api from "./lib/api.js";
-import { DEFAULT_GOAL_ID } from "./lib/goals.js";
+import { DEFAULT_GOAL_ID, goalById } from "./lib/goals.js";
 import { paperSubtitle, sectionAt } from "./lib/outline.js";
 import { pathSentences } from "./lib/readingPath.js";
 
@@ -45,6 +47,7 @@ export default function App() {
   // Bumped to re-run the ranking effect. Setting goalId to its current value
   // would not: React bails out of a state update that changes nothing.
   const [pathAttempt, setPathAttempt] = useState(0);
+  const [activePathId, setActivePathId] = useState(null);
   const jumpedAt = useRef(0);
 
   useEffect(() => {
@@ -94,7 +97,9 @@ export default function App() {
     api
       .fetchReadingPath(paper.paper_id, goalId)
       .then((path) => {
-        if (current) setReadingPath(path);
+        if (!current) return;
+        setReadingPath(path);
+        setActivePathId(null);
       })
       .catch((cause) => {
         if (!current) return;
@@ -146,9 +151,18 @@ export default function App() {
   // jumps to it, but no longer paints it — two highlight systems competing for
   // the same page read as noise.
   const highlightSentences = useMemo(
-    () => pathSentences(paper, readingPath),
-    [paper, readingPath],
+    () => pathSentences(paper, readingPath, activePathId),
+    [paper, readingPath, activePathId],
   );
+
+  // Clicking an explanation jumps to its passage and marks it current, which
+  // is also what draws the focus ring on that highlight.
+  const handleSelectPathItem = useCallback((item) => {
+    setActivePathId(item.id);
+    setSelectedSection(null);
+    jumpedAt.current = Date.now();
+    setScrollToPage({ page: item.page });
+  }, []);
 
   return (
     <div className="app">
@@ -215,6 +229,13 @@ export default function App() {
           onPageChange={handlePageChange}
         />
       </main>
+
+      <ExplanationPanel
+        items={highlightSentences}
+        activeId={activePathId}
+        onSelect={handleSelectPathItem}
+        goalLabel={goalById(goalId).label.toLowerCase()}
+      />
 
       {askingGoal && paper && (
         <GoalModal

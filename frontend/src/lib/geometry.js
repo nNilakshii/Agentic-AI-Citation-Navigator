@@ -58,11 +58,15 @@ export function bboxesOnPage(sentences, pageIndex) {
   for (const sentence of sentences ?? []) {
     for (const bbox of sentence.bboxes ?? []) {
       if (bbox.page !== pageIndex) continue;
-      found.push(
-        sentence.importance === undefined
-          ? bbox
-          : { ...bbox, importance: sentence.importance },
-      );
+      if (sentence.importance === undefined && !sentence.focused) {
+        found.push(bbox);
+        continue;
+      }
+      found.push({
+        ...bbox,
+        importance: sentence.importance,
+        focused: Boolean(sentence.focused),
+      });
     }
   }
   return found;

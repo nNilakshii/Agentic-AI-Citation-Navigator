@@ -197,6 +197,42 @@ Normal cold latency is 4–5s, so this is not urgent, but the message should dis
 
 ---
 
+## Task 1.8 — grounded explanation panel
+
+### The accessible-name collision came back
+
+Exactly the 1.5 problem again: panel entries are buttons, and a section title usually
+appears inside one of its own sentences — so `getByRole("button", {name: /Abstract/})`
+matched both the outline entry and the panel entry quoting "Abstract text here.". Two
+outline tests broke.
+
+Fixed by scoping section queries to `.outline` with `within()`. Worth doing pre-emptively
+next time a new list of buttons is added: this is now twice.
+
+### An explanation is generated prose, so it needed a grounding rule
+
+Unlike the ranking, which can only *select* from real sentences, a plain-language
+restatement is free text and can drift from the source. The structural answer was to make
+the panel incapable of showing one without the other: every entry renders the explanation
+and the verbatim sentence together, and a missing explanation falls back to the sentence
+rather than leaving a gap. The prompt also pins the numbers ("keep every number exactly as
+written") and forbids speculation, on the grounds that a reader will notice immediately
+when the two are side by side.
+
+### Free explanations, because the call was already being made
+
+Worth recording as a cost decision: adding `plain` to the existing ranking schema costs
+output tokens but **no extra request**, which on a 5-per-minute budget is the difference
+between viable and not. A separate "explain this passage" endpoint would have been the
+obvious design and the wrong one.
+
+The cost is that `RANKER_VERSION` had to go to 2, invalidating every cached path — a
+reminder that prompt changes are cache-invalidating events and want batching.
+
+**Tests: 129 → 145 frontend, 123 → 127 backend.**
+
+---
+
 ## Patterns worth carrying forward
 
 1. **Unit tests caught the logic; only a live run caught the damage.** Every bug in B and C

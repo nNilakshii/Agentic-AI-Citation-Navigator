@@ -451,6 +451,15 @@ button:disabled {
 .highlight--i4 { background: rgb(251 191 36 / 52%); }
 .highlight--i5 { background: rgb(251 146 60 / 60%); }
 
+/* The passage the reader picked in the explanation panel. Outlined rather
+   than recoloured, so importance stays readable underneath. */
+.highlight--focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  mix-blend-mode: normal;
+  background: rgb(37 99 235 / 22%);
+}
+
 .highlight--cited {
   background: rgb(56 189 248 / 45%);
 }
@@ -483,4 +492,112 @@ button:disabled {
   font-size: 0.72rem;
   color: var(--accent);
   text-decoration: underline;
+}
+
+/* --- explanation panel (1.8) ---------------------------------------- */
+
+.explain {
+  width: 340px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--border);
+  background: #fff;
+}
+
+.explain__header {
+  padding: 0.85rem 1rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.explain__header h2 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.explain__sub {
+  margin: 0.2rem 0 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.explain__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 0.5rem;
+}
+
+.explain__item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+  padding: 0.6rem 0.65rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  text-align: left;
+}
+
+.explain__item:hover {
+  background: var(--page-bg);
+}
+
+.explain__item--active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.explain__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+.explain__pip {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: rgb(250 204 21);
+}
+
+.explain__pip--i4 { background: rgb(251 191 36); }
+.explain__pip--i5 { background: rgb(251 146 60); }
+
+.explain__page {
+  margin-left: auto;
+}
+
+.explain__plain {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.explain__plain--fallback {
+  color: var(--muted);
+}
+
+/* The source sentence. Visually quieter than the explanation but always
+   present — it is the evidence the explanation is checked against. */
+.explain__quote {
+  margin: 0;
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--border);
+  font-size: 0.74rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.explain__why {
+  font-size: 0.7rem;
+  font-style: italic;
+  color: var(--muted);
 }

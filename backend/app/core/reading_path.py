@@ -29,7 +29,7 @@ from app.models.reading import PathItem, ReadingGoal, ReadingPath
 logger = logging.getLogger(__name__)
 
 #: Bumped when the prompt or the selection logic changes. Part of the cache key.
-RANKER_VERSION = "1"
+RANKER_VERSION = "2"
 
 #: Sentences per LLM call. Sized so a typical conference paper is a *single*
 #: call: the free-tier limit is 5 requests/min, and every extra batch is both
@@ -63,8 +63,16 @@ SELECTION_SCHEMA = {
                         "type": "string",
                         "description": "One short clause, under 15 words.",
                     },
+                    "plain": {
+                        "type": "string",
+                        "description": (
+                            "The sentence restated in plain language, for a "
+                            "reader outside this subfield. One or two "
+                            "sentences. Say only what this sentence says."
+                        ),
+                    },
                 },
-                "required": ["n", "importance", "why"],
+                "required": ["n", "importance", "why", "plain"],
             },
         }
     },
@@ -82,6 +90,12 @@ SYSTEM_PROMPT = (
     "a result follows.\n"
     "- 'why' must describe what is in that sentence, not what you assume the "
     "paper says elsewhere.\n"
+    "- 'plain' restates that one sentence for someone outside the subfield: "
+    "expand the jargon, keep every number exactly as written, and add nothing "
+    "the sentence does not say. If it is already plain, say it more simply "
+    "rather than padding it.\n"
+    "- Never speculate in 'plain'. It sits next to the original sentence in "
+    "the UI, so a reader will notice immediately if it claims more.\n"
     "- Returning fewer than asked is correct when fewer qualify. Do not pad."
 )
 
@@ -195,6 +209,7 @@ async def _rank_batch(
                 text=sentence.text,
                 importance=max(1, min(5, importance)),
                 why=str(selection.get("why") or "").strip()[:200],
+                plain=str(selection.get("plain") or "").strip()[:600],
             )
         )
     return items, dropped

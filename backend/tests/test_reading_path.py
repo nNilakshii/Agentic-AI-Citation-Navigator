@@ -262,6 +262,33 @@ def test_the_budget_never_exceeds_the_paper():
     assert budget_for(ReadingGoal.SKIM, 4) <= 4
 
 
+def test_the_plain_language_explanation_is_carried_through():
+    paper = make_paper(5)
+    llm = FakeLLM(
+        [{"n": 0, "importance": 5, "why": "core claim", "plain": "In short: it works."}]
+    )
+
+    path = build(paper, ReadingGoal.SKIM, llm)
+
+    assert path.items[0].plain == "In short: it works."
+    assert path.items[0].why == "core claim"
+
+
+def test_a_missing_explanation_is_empty_not_absent():
+    # The panel falls back to `why`, so an empty string is the contract.
+    llm = FakeLLM([{"n": 0, "importance": 5, "why": "core claim"}])
+
+    path = build(make_paper(5), ReadingGoal.SKIM, llm)
+
+    assert path.items[0].plain == ""
+
+
+def test_the_prompt_forbids_speculating_in_the_explanation():
+    llm = FakeLLM([])
+    build(make_paper(5), ReadingGoal.SKIM, llm)
+    assert "Never speculate" in llm.systems[0]
+
+
 def test_the_goal_is_recorded_on_the_path():
     path = build(make_paper(10), ReadingGoal.CRITIQUE, FakeLLM([]))
     assert path.goal == ReadingGoal.CRITIQUE

@@ -17,9 +17,10 @@
  *
  * @param {object|null} paper - A ParsedPaper.
  * @param {object|null} path - A ReadingPath.
- * @returns {Array<object>} Sentences carrying `importance` and `why`.
+ * @param {string|null} [focusedId] - Sentence to mark as the current one.
+ * @returns {Array<object>} Sentences carrying the item's explanation fields.
  */
-export function pathSentences(paper, path) {
+export function pathSentences(paper, path, focusedId = null) {
   if (!paper?.sentences?.length || !path?.items?.length) return [];
 
   const byId = new Map(paper.sentences.map((sentence) => [sentence.id, sentence]));
@@ -27,7 +28,13 @@ export function pathSentences(paper, path) {
   for (const item of path.items) {
     const sentence = byId.get(item.sentence_id);
     if (!sentence) continue;
-    resolved.push({ ...sentence, importance: item.importance, why: item.why });
+    resolved.push({
+      ...sentence,
+      importance: item.importance,
+      why: item.why,
+      plain: item.plain ?? "",
+      focused: sentence.id === focusedId,
+    });
   }
   return resolved;
 }

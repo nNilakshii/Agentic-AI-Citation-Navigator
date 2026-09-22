@@ -95,6 +95,7 @@ export const readingPath = {
       text: "Abstract text here.",
       importance: 5,
       why: "states the core claim",
+      plain: "The authors say their new model beats what came before.",
     },
     {
       sentence_id: "s00002",
@@ -105,6 +106,7 @@ export const readingPath = {
       text: "Introduction text follows.",
       importance: 2,
       why: "background framing",
+      plain: "This sets up the problem the paper is about to solve.",
     },
   ],
 };

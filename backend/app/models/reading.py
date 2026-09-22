@@ -44,6 +44,13 @@ class PathItem(BaseModel):
         description="One line on why this matters for the goal. Grounded in the "
         "sentence itself — shown in the 1.8 explanation panel."
     )
+    plain: str = Field(
+        default="",
+        description="The sentence restated in plain language (1.8). Always "
+        "displayed beside `text`, never instead of it: the explanation is "
+        "generated prose and the sentence is the evidence for it, so a reader "
+        "can always check one against the other.",
+    )
 
 
 class ReadingPath(BaseModel):
