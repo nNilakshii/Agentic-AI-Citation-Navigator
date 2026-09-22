@@ -22,11 +22,12 @@ export default function HighlightLayer({ bboxes, scale, variant = "path" }) {
         const strength = bbox.importance
           ? ` highlight--i${Math.max(1, Math.min(5, bbox.importance))}`
           : "";
+        const focus = bbox.focused ? " highlight--focus" : "";
         return (
           <div
             key={`${bbox.page}-${index}-${left}-${top}`}
             data-importance={bbox.importance ?? undefined}
-            className={`highlight highlight--${variant}${strength}`}
+            className={`highlight highlight--${variant}${strength}${focus}`}
             style={{
               left: `${left}px`,
               top: `${top}px`,

@@ -36,8 +36,18 @@ class FakeLLM:
         # Always pick the first two sentences shown.
         return {
             "selections": [
-                {"n": 0, "importance": 5, "why": "states the core claim"},
-                {"n": 1, "importance": 3, "why": "supporting detail"},
+                {
+                    "n": 0,
+                    "importance": 5,
+                    "why": "states the core claim",
+                    "plain": "In plain terms: this is the main point.",
+                },
+                {
+                    "n": 1,
+                    "importance": 3,
+                    "why": "supporting detail",
+                    "plain": "In plain terms: this backs up the point above.",
+                },
             ]
         }
 
@@ -98,6 +108,13 @@ def test_each_item_carries_a_reason_for_the_explanation_panel(client, paper_id):
     path = rank(client, paper_id).json()
     assert all(item["why"] for item in path["items"])
     assert all(1 <= item["importance"] <= 5 for item in path["items"])
+
+
+def test_each_item_carries_a_plain_language_explanation(client, paper_id):
+    # 1.8 shows this beside the sentence, so it travels on the same response
+    # rather than costing a second LLM call.
+    path = rank(client, paper_id).json()
+    assert all(item["plain"] for item in path["items"])
 
 
 @pytest.mark.parametrize("goal", [g.value for g in ReadingGoal])
