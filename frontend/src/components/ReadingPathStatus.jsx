@@ -48,8 +48,8 @@ export default function ReadingPathStatus({ path, busy, error, onRetry }) {
         </p>
         {elapsed >= SLOW_AFTER_SECONDS && (
           <p className="path-status__waiting">
-            Ranking a paper for the first time costs one API call, and the free
-            tier allows 5 a minute. If the quota is busy this waits for it —
+            Ranking a paper for the first time costs one API call, and the
+            free tier allows 20 a day. If the quota is busy this waits for it —
             a minute or two is normal, and it will finish on its own.
           </p>
         )}

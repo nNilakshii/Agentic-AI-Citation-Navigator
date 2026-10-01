@@ -22,7 +22,8 @@ class Settings(BaseSettings):
     #: 0 disables Gemini's thinking tokens. See app/llm/client.py.
     llm_thinking_budget: int = 0
     #: Parallel LLM calls. Measured free-tier limit for gemini-3.6-flash is
-    #: 5 requests/min, so overlapping more than a pair just rate-limits us.
+    #: 5 requests/min (and 20/day), so overlapping more than a pair only
+    #: rate-limits us.
     llm_max_concurrency: int = 2
     #: Attempts per call, including the first. Free-tier 429s ask for a ~45s
     #: wait, so two retries covers a quota window without hanging the request.
@@ -35,10 +36,15 @@ class Settings(BaseSettings):
     #: Comma-separated origins allowed to call the API. The deployed frontend
     #: lives on a different host from the backend, so it must be named here.
     allowed_origins: str = "http://localhost:5173"
-    #: Live rankings allowed per client per hour. Only *uncached* rankings
-    #: count, so browsing the pre-ranked samples is never limited. Guards the
-    #: shared free-tier quota from a single visitor on a public deployment.
-    rank_limit_per_hour: int = 6
+    #: Live rankings this deployment will make in a day, in total. The Gemini
+    #: free tier allows 20 generateContent requests per day per model
+    #: (measured 2026-10-01), and that cap is global rather than per visitor,
+    #: so this is the budget that actually protects it. Default leaves
+    #: headroom for a long paper that needs two batches. 0 disables.
+    rank_budget_per_day: int = 15
+    #: ...and one visitor's share of it, so a single person cannot take the
+    #: lot. Only uncached rankings count against either. 0 disables.
+    rank_limit_per_visitor: int = 3
 
     def origins(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]

@@ -1,15 +1,24 @@
-"""A per-client budget for live rankings (deployment hardening).
+"""Budgets for live rankings (deployment hardening).
 
-One shared Gemini key serves every visitor, and the free tier allows 5 requests
-a minute. Browsing the pre-ranked sample papers costs nothing — those paths
-ship with the image — but an upload is a live call, so without a limit one
-visitor can drain the quota for everyone and the demo goes quiet for a minute
-at a time (which is exactly what it looks like when it is broken).
+Measured 2026-10-01: the Gemini free tier allows **20 `generateContent`
+requests per day** per model, alongside the better-known 5-per-minute limit.
+The daily cap is the binding one and it is *global* — one number shared by
+every visitor to a deployment, not a rate each of them gets.
 
-Deliberately an in-process fixed window: there is one backend process, the
-limit protects a shared quota rather than enforcing a policy, and a Redis
-dependency would cost more than the problem is worth. It resets on restart,
-which on a scale-to-zero host is acceptable — the quota resets far faster.
+That makes a per-visitor rate limit insufficient on its own. Three visitors on
+a generous per-visitor allowance would spend the whole day's quota before
+lunch, and everyone after them meets a reader that silently fails to rank
+anything. So there are two budgets:
+
+- a **global daily** budget, which is what actually protects the quota, and
+- a **per-visitor daily** cap, so one person cannot take all of it.
+
+Browsing the pre-ranked sample papers costs nothing and is never limited:
+these are checked only on the path that truly reaches the model.
+
+Deliberately in-process. There is one backend process; the budget guards a
+quota rather than enforcing a policy; and it resets on restart, which is
+acceptable because the thing it protects resets daily anyway.
 """
 
 from __future__ import annotations
@@ -21,10 +30,11 @@ from fastapi import HTTPException, Request
 
 from app.config import get_settings
 
-WINDOW_SECONDS = 3600
+DAY_SECONDS = 86400
 
-#: client key -> timestamps of live rankings inside the window.
-_hits: dict[str, list[float]] = defaultdict(list)
+#: Timestamps of live rankings, globally and per client, within the window.
+_global: list[float] = []
+_per_client: dict[str, list[float]] = defaultdict(list)
 
 
 def client_key(request: Request) -> str:
@@ -32,8 +42,8 @@ def client_key(request: Request) -> str:
 
     Behind a proxy (every PaaS) the socket address is the proxy's, so the
     forwarded header is the only thing that distinguishes visitors. It is
-    client-supplied and therefore spoofable — fine here, because this guards a
-    quota rather than access to anything.
+    client-supplied and therefore spoofable — acceptable, because the global
+    budget is the real protection and this only stops honest over-use.
     """
     forwarded = request.headers.get("x-forwarded-for", "")
     if forwarded:
@@ -41,36 +51,70 @@ def client_key(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def check_rank_budget(request: Request) -> None:
-    """Raise 429 if this client has spent its hourly live-ranking budget.
+def _recent(stamps: list[float], now: float) -> list[float]:
+    return [t for t in stamps if now - t < DAY_SECONDS]
 
-    Call only on the path that actually reaches the LLM — a cache hit must
-    never consume budget, or browsing the samples would exhaust it.
+
+def check_rank_budget(request: Request) -> None:
+    """Raise if this ranking would exceed either budget.
+
+    Call only where an LLM call actually follows — a cache hit must never
+    consume budget, or browsing the samples would exhaust the day.
     """
-    limit = get_settings().rank_limit_per_hour
-    if limit <= 0:  # 0 disables the limit, for local development
-        return
+    settings = get_settings()
+    global _global
+
+    now = time.time()
+    _global = _recent(_global, now)
+
+    # 503, not 429: the deployment is out of capacity for the day, which is a
+    # different thing from this visitor asking too often.
+    if (
+        settings.rank_budget_per_day > 0
+        and len(_global) >= settings.rank_budget_per_day
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Today's ranking budget is spent — this demo runs on a free "
+                "API tier that allows 20 new papers a day. Every sample paper "
+                "is already ranked and works normally; uploads will work again "
+                "tomorrow."
+            ),
+        )
 
     key = client_key(request)
-    now = time.time()
-    recent = [t for t in _hits[key] if now - t < WINDOW_SECONDS]
-    _hits[key] = recent
+    mine = _recent(_per_client[key], now)
+    _per_client[key] = mine
 
-    if len(recent) >= limit:
-        oldest = min(recent)
-        retry_after = int(WINDOW_SECONDS - (now - oldest)) + 1
+    if (
+        settings.rank_limit_per_visitor > 0
+        and len(mine) >= settings.rank_limit_per_visitor
+    ):
         raise HTTPException(
             status_code=429,
             detail=(
-                f"You've ranked {limit} new papers this hour, which is the "
-                "shared free-tier budget. The sample papers are pre-ranked and "
-                "always available. Try again later."
+                f"You've ranked {settings.rank_limit_per_visitor} new papers "
+                "today, which is this demo's per-visitor share of a free API "
+                "tier. The sample papers are pre-ranked and always available."
             ),
-            headers={"Retry-After": str(retry_after)},
+            headers={"Retry-After": str(DAY_SECONDS)},
         )
-    _hits[key].append(now)
+
+    _global.append(now)
+    _per_client[key].append(now)
+
+
+def budget_remaining() -> int:
+    """Live rankings left today, for the health endpoint."""
+    settings = get_settings()
+    if settings.rank_budget_per_day <= 0:
+        return -1  # unlimited
+    return max(0, settings.rank_budget_per_day - len(_recent(_global, time.time())))
 
 
 def reset_budgets() -> None:
-    """Test helper — the window is process state."""
-    _hits.clear()
+    """Test helper — the budgets are process state."""
+    global _global
+    _global = []
+    _per_client.clear()

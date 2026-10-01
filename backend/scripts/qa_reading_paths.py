@@ -11,14 +11,17 @@ reading path untrustworthy rather than merely imperfect:
 - goals that select the same sentences, which would mean the conditioning is
   doing no work
 
-Free-tier Gemini allows 5 requests/minute, so this paces itself and is slow by
-design. Results are cached, so a second run is nearly free.
+The free tier allows **20 requests per day** (and 5 per minute). Thirty
+rankings therefore cannot be built in one day: use ``--max-calls`` to take a
+bite each day and let the cache accumulate. Cached results are free, so each
+run resumes where the last stopped.
 
 Usage (backend/, venv active, server NOT required):
 
-    python scripts/qa_reading_paths.py
-    python scripts/qa_reading_paths.py --papers attention-is-all-you-need.pdf
-    python scripts/qa_reading_paths.py --force      # ignore cached paths
+    python scripts/qa_reading_paths.py --max-calls 15   # a day's worth
+    python scripts/qa_reading_paths.py                  # check what is cached
+    python scripts/qa_reading_paths.py --papers bert.pdf
+    python scripts/qa_reading_paths.py --force          # ignore cached paths
 """
 
 from __future__ import annotations
@@ -40,8 +43,8 @@ from app.models.reading import ReadingGoal  # noqa: E402
 
 SAMPLES = Path(__file__).resolve().parents[2] / "data" / "samples"
 
-#: Spacing between live calls. The limit is 5/min; 13s leaves headroom for the
-#: retry path without making a full run unbearable.
+#: Spacing between live calls, for the 5-per-minute limit. The daily cap of 20
+#: is the one that actually bounds a run — see --max-calls.
 PACE_SECONDS = 13.0
 
 
@@ -54,18 +57,24 @@ async def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--papers", nargs="*", help="Sample filenames; default all")
     parser.add_argument("--force", action="store_true", help="Ignore cached paths")
+    parser.add_argument(
+        "--max-calls",
+        type=int,
+        default=0,
+        help="Stop after this many live rankings (0 = no limit). The free tier "
+        "allows 20 a day, so a full sweep takes two sittings.",
+    )
     args = parser.parse_args()
 
-    # A full sweep is ~30 calls against a 5/min quota. Run it while someone is
-    # using the reader and *their* ranking queues behind it — measured at 62s
-    # for one upload, which is indistinguishable from the app being broken.
-    uncached = args.force or True
-    if uncached and not args.papers:
+    # A full sweep is ~30 calls against a 20-a-day quota, so it cannot finish
+    # in one sitting. Run it while someone is using the reader and *their*
+    # ranking queues behind it — measured at 62s for one upload, which is
+    # indistinguishable from the app being broken.
+    if not args.papers:
         print(
-            "Note: a full sweep consumes the shared Gemini quota for several "
-            "minutes.\n"
-            "      Don't run it while using the reader — interactive rankings "
-            "will queue behind it.\n"
+            "Note: the free tier allows 20 rankings a day, shared with anything\n"
+            "      else using this key. Don't run this while using the reader —\n"
+            "      interactive rankings queue behind it and may be refused.\n"
         )
 
     names = args.papers or sorted(p.name for p in SAMPLES.glob("*.pdf"))
@@ -77,6 +86,8 @@ async def main() -> int:
     client = GeminiClient()
     problems: list[str] = []
     rows: list[dict] = []
+    live_calls = 0
+    stopped_early = False
 
     for name in names:
         path = SAMPLES / name
@@ -105,12 +116,17 @@ async def main() -> int:
                 result = cached
                 live = False
             else:
+                if args.max_calls and live_calls >= args.max_calls:
+                    stopped_early = True
+                    continue
                 try:
                     result = await build_reading_path(paper, goal, client)
                 except LLMError as exc:
+                    live_calls += 1  # it reached the API, so it cost quota
                     problems.append(f"{name} [{goal.value}]: ranking failed — {exc}")
                     continue
                 live = True
+                live_calls += 1
                 if result.is_complete:
                     store.save_reading_path(result)
 
@@ -186,7 +202,15 @@ async def main() -> int:
             f"{r['considered']:>5} {r['pages']:>7} {str(r['first_page']):>4}"
         )
 
-    print(f"\n{len(rows)} rankings over {len(names)} papers.")
+    print(
+        f"\n{len(rows)} rankings over {len(names)} papers; {live_calls} live call(s)."
+    )
+    if stopped_early:
+        remaining = len(names) * 3 - len(rows)
+        print(
+            f"Stopped at the --max-calls limit with ~{remaining} ranking(s) still "
+            "to build.\nRun again tomorrow to continue — cached work is not redone."
+        )
     if problems:
         print(f"\n{len(problems)} problem(s):")
         for p in problems:
