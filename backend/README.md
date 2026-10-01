@@ -72,3 +72,20 @@ curl -X POST localhost:8000/api/reader/papers/samples/attention-is-all-you-need.
 ```bash
 pytest
 ```
+
+## Quality gate across the sample papers (Phase 1.10)
+
+```bash
+python scripts/qa_reading_paths.py                    # all 10 samples, 3 goals
+python scripts/qa_reading_paths.py --papers bert.pdf  # one paper
+python scripts/qa_reading_paths.py --force            # ignore cached paths
+```
+
+Exercises the real pipeline and fails on the things that make a reading path
+untrustworthy rather than merely imperfect: a span that does not cut its own
+text out of the document, an invented sentence id, a path that silently lost a
+batch, an empty path, or three goals that select the same sentences (which
+would mean the goal conditioning is inert).
+
+Paced at one call per 13s for the free tier's 5/min limit, so a cold full run
+takes ~6 minutes. Cached afterwards, so re-runs are instant.

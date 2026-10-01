@@ -610,10 +610,12 @@ describe("the backend connection (1.9)", () => {
 
       // Under ~8s it is just latency; past it, the backend is almost certainly
       // sitting out a 429 and the reader should be told which.
-      expect(screen.queryByText(/5 requests a minute/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/free\s+tier allows 5 a minute/)).not.toBeInTheDocument();
       await vi.advanceTimersByTimeAsync(9000);
 
-      expect(await screen.findByText(/5 requests a minute/)).toBeInTheDocument();
+      expect(await screen.findByText(/free\s+tier allows 5 a minute/)).toBeInTheDocument();
+      // A ticking count, so a long wait visibly differs from a hang.
+      expect(screen.getByRole("status").textContent).toMatch(/\d+s/);
     } finally {
       vi.useRealTimers();
     }

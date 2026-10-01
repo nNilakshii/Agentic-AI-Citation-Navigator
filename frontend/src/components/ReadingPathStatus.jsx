@@ -19,30 +19,38 @@ import { isPartial, pathSummary } from "../lib/readingPath.js";
  * the client waits exactly that long — so the reader deserves to be told the
  * difference between "working" and "queued behind a quota".
  */
-const SLOW_AFTER_MS = 8000;
+const SLOW_AFTER_SECONDS = 8;
 
 export default function ReadingPathStatus({ path, busy, error, onRetry }) {
-  const [slow, setSlow] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
 
+  // A ticking count, not just a message: a measured 62s wait behind a rate
+  // limit is indistinguishable from a hung request if nothing on screen moves.
   useEffect(() => {
     if (!busy) {
-      setSlow(false);
+      setElapsed(0);
       return undefined;
     }
-    const timer = setTimeout(() => setSlow(true), SLOW_AFTER_MS);
-    return () => clearTimeout(timer);
+    const started = Date.now();
+    const timer = setInterval(
+      () => setElapsed(Math.floor((Date.now() - started) / 1000)),
+      1000,
+    );
+    return () => clearInterval(timer);
   }, [busy]);
 
   if (busy) {
     return (
       <div className="path-status">
         <p className="sidebar__hint" role="status">
-          Finding your reading path…
+          Finding your reading path
+          {elapsed >= SLOW_AFTER_SECONDS ? ` — ${elapsed}s` : "…"}
         </p>
-        {slow && (
+        {elapsed >= SLOW_AFTER_SECONDS && (
           <p className="path-status__waiting">
-            Still going. The free API tier allows 5 requests a minute, so this
-            can wait up to a minute before it retries.
+            Ranking a paper for the first time costs one API call, and the free
+            tier allows 5 a minute. If the quota is busy this waits for it —
+            a minute or two is normal, and it will finish on its own.
           </p>
         )}
       </div>
