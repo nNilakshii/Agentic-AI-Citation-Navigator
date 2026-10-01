@@ -106,7 +106,7 @@ export default function App() {
   //
   // Nothing is ranked while the goal modal is open. Ranking on paper load
   // would spend a call on the default goal, and a second on whatever the
-  // reader then picks — two LLM calls against a 5-per-minute budget for one
+  // reader then picks — two LLM calls against a 20-a-day budget for one
   // opened paper.
   useEffect(() => {
     if (!paper || askingGoal) return undefined;

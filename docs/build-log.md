@@ -271,6 +271,49 @@ their own key, or a run mode that will not start while the server is serving.
 
 ---
 
+## Task 1.10 — the sweep, and the quota that was never 5/min
+
+### The real limit is 20 a day, and I had been designing around the wrong one
+
+The 1.10 sweep needed thirty rankings. It produced ten, and the failures said why:
+
+```
+quotaId:    GenerateRequestsPerDayPerProjectPerModel-FreeTier
+quotaValue: 20
+```
+
+That appeared **39 times**; the 5-per-minute limit appeared once. Both are real, but the
+daily cap binds first and I had never seen it, because until a run needed more than twenty
+calls nothing ever reached it. Every design decision since 1.6 — batch size, concurrency,
+pacing, the deployment's rate limit — was made against the wrong number.
+
+**Why it stayed hidden:** both limits return 429 with a ~45s `retryDelay`, so from inside
+the retry logic they are indistinguishable. Only the quota metadata in the payload names
+which one fired, and nothing was reading it.
+
+The costly consequence was the deployment design. `RANK_LIMIT_PER_HOUR=6` looked prudent
+against 5/min; against 20/day it means **three visitors empty the day**. Worse, a
+per-visitor limit *cannot* protect a global quota however it is tuned — several visitors
+each well inside their own allowance still exhaust it together. That needed a different
+shape: a global daily budget plus a per-visitor share, with what remains reported on
+`/health`.
+
+**Generalisable:** when an API refuses you, read which limit it names. A rate limit and a
+quota look identical at the call site and want opposite responses — one wants you to wait,
+the other wants you to stop for the day.
+
+### What the sweep found when it was not being rate-limited
+
+The checks earned their place. `specter [skim]` came back **empty**, and three papers lost
+a batch — caught by the completeness signal added in 1.6 rather than shipping as quietly
+truncated paths. Nothing drifted: zero span mismatches, zero invented ids, across every
+ranking that completed.
+
+1.10 is not finished. Six of thirty paths are current and committed; the rest need another
+day's quota.
+
+---
+
 ## Patterns worth carrying forward
 
 1. **Unit tests caught the logic; only a live run caught the damage.** Every bug in B and C
@@ -287,3 +330,6 @@ their own key, or a run mode that will not start while the server is serving.
 6. **Watch a cold run, not just a warm one.** The wasted duplicate call in 1.7 was
    invisible with everything cached; it only showed up on a paper that had never been
    ranked.
+7. **Read *which* limit an API names.** Four tasks were designed against a 5-per-minute
+   limit that was never the binding one. A rate limit and a daily quota are the same 429
+   at the call site and want opposite responses.

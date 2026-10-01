@@ -1,8 +1,8 @@
 """The LLM wrapper's retry and error classification (task 1.6).
 
-These exist because free-tier Gemini rate-limits at 5 requests/minute, which a
-single long paper can trip on its own. Getting the retry wrong is not a
-performance problem — a swallowed 429 silently truncates a reading path.
+These exist because free-tier Gemini rate-limits at 5 requests/minute and 20
+a day, either of which a single long paper can trip. Getting the retry wrong is
+not a performance problem — a swallowed 429 silently truncates a reading path.
 """
 
 import asyncio

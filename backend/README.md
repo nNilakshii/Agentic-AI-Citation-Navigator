@@ -57,8 +57,8 @@ a reading path cannot contain a sentence the paper does not have.
 Ranking costs LLM quota, so paths are cached per (paper, parser version, goal, ranker
 version) — but **only when complete**. If a batch fails, `n_batches_failed` is non-zero
 and the result is served without being cached, so a transient rate limit cannot leave a
-permanently truncated path behind. Free-tier Gemini allows 5 requests/min; see
-`docs/architecture.md`.
+permanently truncated path behind. Free-tier Gemini allows 20 requests a day
+(and 5 a minute); see `docs/architecture.md`.
 
 ```bash
 # parse a sample paper and read off its outline
@@ -87,5 +87,6 @@ text out of the document, an invented sentence id, a path that silently lost a
 batch, an empty path, or three goals that select the same sentences (which
 would mean the goal conditioning is inert).
 
-Paced at one call per 13s for the free tier's 5/min limit, so a cold full run
-takes ~6 minutes. Cached afterwards, so re-runs are instant.
+The free tier allows 20 rankings a day, so a full 30-ranking sweep takes two
+sittings: use `--max-calls 15` and run again tomorrow. Cached work is never
+redone, so each run resumes where the last stopped.

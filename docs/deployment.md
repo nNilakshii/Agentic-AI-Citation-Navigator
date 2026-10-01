@@ -12,23 +12,29 @@ holds the Gemini key, so it needs a real server and the key never reaches the br
 
 ## The constraint everything else follows from
 
-One Gemini key serves every visitor, and the free tier allows **5 requests a minute**.
-A public demo therefore cannot rank papers on demand for an audience — three people
-clicking three papers would queue behind each other for a minute at a time, which is
+One Gemini key serves every visitor, and the free tier allows **20 requests a day** —
+not per visitor, but in total, for the whole project. (There is also a 5-per-minute
+limit, but the daily one binds first.)
+
+A public demo therefore cannot rank papers on demand for an audience. Twenty uploads
+empties the day for everyone, and a queue behind the per-minute limit is already
 indistinguishable from the app being broken (see `build-log.md`, 1.9).
 
 So the demo path makes **no LLM calls at all**:
 
 - `data/cache/parsed/` and `data/cache/reading_paths/` are **committed** (~4 MB) and
   copied into the image. Every sample paper, every goal, already ranked.
-- Only an upload reaches the model, and `RANK_LIMIT_PER_HOUR` caps how many a single
-  visitor can spend. A cache hit never costs budget, so browsing is never limited.
+- Only an upload reaches the model. `RANK_BUDGET_PER_DAY` caps what the deployment spends
+  in total and `RANK_LIMIT_PER_VISITOR` caps one person's share; `/health` reports what is
+  left. A cache hit never costs budget, so browsing is never limited.
 
 Regenerate the committed caches after any prompt change (which bumps `RANKER_VERSION`
 and invalidates them):
 
 ```bash
-cd backend && python scripts/qa_reading_paths.py   # ~10 min, paced for the quota
+# 30 rankings against a 20-a-day quota: two sittings.
+cd backend && python scripts/qa_reading_paths.py --max-calls 15
+# ...then again tomorrow. Cached work is never redone.
 git add data/cache/parsed data/cache/reading_paths
 ```
 
@@ -59,7 +65,8 @@ that is the cost of deploying from one repo.
    |---|---|---|
    | `GEMINI_API_KEY` | Secret | your key |
    | `ALLOWED_ORIGINS` | Variable | `https://<user>.github.io` |
-   | `RANK_LIMIT_PER_HOUR` | Variable | `6` |
+   | `RANK_BUDGET_PER_DAY` | Variable | `15` |
+   | `RANK_LIMIT_PER_VISITOR` | Variable | `3` |
 
 4. Wait for the build, then check `https://<space>.hf.space/health` returns
    `{"status":"ok"}` and `/api/reader/samples` lists ten papers.
@@ -90,7 +97,7 @@ built against `/` 404s on every asset.
 ## Checking it
 
 ```bash
-curl https://<space>.hf.space/health
+curl https://<space>.hf.space/health          # {"status":"ok","rankings_left_today":15}
 curl https://<space>.hf.space/api/reader/samples
 ```
 
@@ -106,9 +113,10 @@ image.
   its ranking vanish on restart. The committed samples always survive.
 - **The rate limit is per process and in-memory.** It resets on restart and is keyed on
   `X-Forwarded-For`, which a determined visitor can spoof. It guards a quota, not access.
-- **One key, one quota.** Heavy upload traffic will still exhaust it; the limit only
-  stops a single visitor doing so alone. If the demo gets real use, the ranking endpoint
-  wants its own key or a paid tier.
+- **Twenty rankings a day, total.** That is the whole budget, shared by everyone. The
+  pre-ranked samples are unaffected, but uploads will stop working once the day is spent
+  and resume at the quota reset. If the demo gets real use, enable billing — pay-as-you-go
+  Flash is fractions of a cent per ranking and makes this disappear.
 - **Phase 2/3 evaluation will not fit.** The CL-SciSumm harness is far larger than the
   thirty calls that already strain this budget, and it draws on the same key as the live
   app. Plan a separate key before that work starts.

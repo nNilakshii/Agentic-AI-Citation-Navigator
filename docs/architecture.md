@@ -158,11 +158,21 @@ limiter, with retry-and-backoff on 429.
 Combined with the response cache below, a re-run of the eval harness should issue close to
 zero live requests — only genuinely new papers reach the network.
 
-### Gemini free tier: 5 requests/min shapes how a paper is batched
+### Gemini free tier: 20 requests a day shapes everything
 
-Measured 2026-09-05 while building 1.6, against `gemini-3.6-flash`: the free tier allows
-**5 `generateContent` requests per minute per model**, and a 429 carries a `retryDelay` of
-~45s. Two things follow.
+Two limits, measured against `gemini-3.6-flash`:
+
+| Limit | Value | Found |
+|---|---|---|
+| `GenerateRequestsPerMinutePerProjectPerModel` | **5 / minute** | 2026-09-05, building 1.6 |
+| `GenerateRequestsPerDayPerProjectPerModel` | **20 / day** | 2026-10-01, during the 1.10 sweep |
+
+A 429 carries a `retryDelay` of ~45s in both cases, which is why the per-minute limit was
+the only one visible at first: a run small enough to finish never reached the daily cap.
+The 1.10 sweep needed thirty rankings and hit the daily limit thirty-nine times.
+
+**The daily cap is the binding constraint, and it is global** — one number for the whole
+project, not a rate each caller gets. Three things follow.
 
 **1. One paper should be one request.** A 15-page paper is ~300 rankable sentences. Early
 1.6 used a 200-sentence batch, so every paper took two calls — and ranking all three goals
@@ -177,6 +187,13 @@ inspection — the sentences it contains are genuine, there are just fewer of th
 it would turn a transient 429 into a permanently truncated reading path for that paper and
 goal. `ReadingPath.n_batches_failed` records this and the endpoint caches only when it is
 zero, so a rate-limited run costs latency rather than correctness.
+
+**3. A deployment needs a budget, not a rate limit.** A per-visitor rate limit does not
+protect a global daily quota: a handful of visitors well inside their own allowance can
+still spend the day's twenty between them. So the API carries a global daily budget
+(`RANK_BUDGET_PER_DAY`) *and* a per-visitor share (`RANK_LIMIT_PER_VISITOR`), and reports
+what is left on `/health`. A public demo therefore ships every sample paper pre-ranked —
+browsing costs nothing, and only uploads draw on the budget.
 
 Retries honour the server's own `retryDelay` rather than guessing, with jitter so batches
 limited together don't retry in lockstep and trip the same window again.

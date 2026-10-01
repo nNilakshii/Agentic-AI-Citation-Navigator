@@ -54,17 +54,18 @@ def rank(client, paper_id, goal="skim", **kw):
 
 
 def test_a_cached_ranking_never_costs_budget(client, paper_id, monkeypatch):
-    monkeypatch.setenv("RANK_LIMIT_PER_HOUR", "1")
+    monkeypatch.setenv("RANK_BUDGET_PER_DAY", "1")
     get_settings.cache_clear()
 
     assert rank(client, paper_id).status_code == 200  # the one live call
-    # Every repeat is served from cache, so the demo keeps working.
+    # Every repeat is served from cache, so the demo keeps working all day
+    # even with the budget fully spent.
     for _ in range(5):
         assert rank(client, paper_id).status_code == 200
 
 
-def test_live_rankings_beyond_the_budget_are_refused(client, paper_id, monkeypatch):
-    monkeypatch.setenv("RANK_LIMIT_PER_HOUR", "2")
+def test_a_visitor_cannot_take_more_than_their_share(client, paper_id, monkeypatch):
+    monkeypatch.setenv("RANK_LIMIT_PER_VISITOR", "2")
     get_settings.cache_clear()
 
     assert rank(client, paper_id, goal="skim").status_code == 200
@@ -76,24 +77,64 @@ def test_live_rankings_beyond_the_budget_are_refused(client, paper_id, monkeypat
     assert refused.headers.get("Retry-After")
 
 
-def test_the_limit_can_be_disabled_for_local_use(client, paper_id, monkeypatch):
-    monkeypatch.setenv("RANK_LIMIT_PER_HOUR", "0")
+def test_the_days_budget_is_global_not_per_visitor(client, paper_id, monkeypatch):
+    # The quota this protects is 20 requests a day for the whole project, so a
+    # limit each visitor gets afresh would not protect it at all.
+    monkeypatch.setenv("RANK_BUDGET_PER_DAY", "2")
+    monkeypatch.setenv("RANK_LIMIT_PER_VISITOR", "5")
+    get_settings.cache_clear()
+
+    a = {"X-Forwarded-For": "203.0.113.1"}
+    b = {"X-Forwarded-For": "203.0.113.2"}
+    assert rank(client, paper_id, goal="skim", headers=a).status_code == 200
+    assert rank(client, paper_id, goal="in-depth", headers=b).status_code == 200
+
+    # A third visitor, well inside their own share, still finds the day spent.
+    spent = rank(
+        client, paper_id, goal="critique", headers={"X-Forwarded-For": "203.0.113.3"}
+    )
+    assert spent.status_code == 503
+    assert "tomorrow" in spent.json()["detail"]
+
+
+def test_running_out_for_the_day_is_503_not_429(client, paper_id, monkeypatch):
+    # 429 says "you asked too often"; this is "the deployment is out of
+    # capacity", which is the visitor's problem but not their fault.
+    monkeypatch.setenv("RANK_BUDGET_PER_DAY", "1")
+    get_settings.cache_clear()
+
+    rank(client, paper_id, goal="skim")
+    assert rank(client, paper_id, goal="critique").status_code == 503
+
+
+def test_the_limits_can_be_disabled_for_local_use(client, paper_id, monkeypatch):
+    monkeypatch.setenv("RANK_BUDGET_PER_DAY", "0")
+    monkeypatch.setenv("RANK_LIMIT_PER_VISITOR", "0")
     get_settings.cache_clear()
 
     for goal in ("skim", "in-depth", "critique"):
         assert rank(client, paper_id, goal=goal).status_code == 200
 
 
-def test_clients_are_budgeted_separately(client, paper_id, monkeypatch):
-    monkeypatch.setenv("RANK_LIMIT_PER_HOUR", "1")
+def test_visitors_are_budgeted_separately(client, paper_id, monkeypatch):
+    monkeypatch.setenv("RANK_LIMIT_PER_VISITOR", "1")
     get_settings.cache_clear()
 
     a = {"X-Forwarded-For": "203.0.113.1"}
     b = {"X-Forwarded-For": "203.0.113.2"}
     assert rank(client, paper_id, goal="skim", headers=a).status_code == 200
     assert rank(client, paper_id, goal="in-depth", headers=a).status_code == 429
-    # A different visitor has their own budget.
+    # A different visitor has their own share.
     assert rank(client, paper_id, goal="in-depth", headers=b).status_code == 200
+
+
+def test_health_reports_what_is_left(client, paper_id, monkeypatch):
+    monkeypatch.setenv("RANK_BUDGET_PER_DAY", "3")
+    get_settings.cache_clear()
+
+    assert client.get("/health").json()["rankings_left_today"] == 3
+    rank(client, paper_id, goal="skim")
+    assert client.get("/health").json()["rankings_left_today"] == 2
 
 
 def test_the_forwarded_header_identifies_the_client_behind_a_proxy():

@@ -32,9 +32,9 @@ logger = logging.getLogger(__name__)
 RANKER_VERSION = "2"
 
 #: Sentences per LLM call. Sized so a typical conference paper is a *single*
-#: call: the free-tier limit is 5 requests/min, and every extra batch is both
-#: a chance to be rate-limited and a chance to lose part of the paper. A
-#: 15-page paper is ~300 rankable sentences, well inside this.
+#: call: the free tier allows only 20 requests a *day*, and every extra batch
+#: is both a chance to be rate-limited and a chance to lose part of the paper.
+#: A 15-page paper is ~300 rankable sentences, well inside this.
 BATCH_SIZE = 400
 
 #: A sentence too short to carry a claim ("See Fig. 3.", "Proof.") is never a

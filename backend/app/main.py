@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import reader
+from app.api.limits import budget_remaining
 from app.config import get_settings
 
 app = FastAPI(title="AURA Citation Navigator API", version="0.1.0")
@@ -18,7 +19,12 @@ app.add_middleware(
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok"}
+    """Liveness, plus what is left of today's ranking budget.
+
+    The budget is the thing most likely to make a deployment behave oddly, and
+    it is invisible from the outside otherwise.
+    """
+    return {"status": "ok", "rankings_left_today": budget_remaining()}
 
 
 # --- Phase 1: base reading assistant + goal-adaptive reading ---
