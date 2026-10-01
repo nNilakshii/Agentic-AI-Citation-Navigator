@@ -22,6 +22,22 @@ npm-debug.log*
 data/**/*.pdf
 data/**/*.json
 data/raw/
+
+# ...except the pre-computed parses and reading paths. These are committed on
+# purpose: the deployed image serves every sample paper without a single LLM
+# call, which is what lets a public demo survive a 5-request-per-minute free
+# tier with several visitors at once. ~4 MB, and regenerable with
+# `python backend/scripts/qa_reading_paths.py`.
+!data/cache/parsed/
+!data/cache/parsed/*.json
+!data/cache/reading_paths/
+!data/cache/reading_paths/*.json
+
+# Only the ten sample papers belong in the repo. Anything else in the cache is
+# something a developer opened locally — their own PDFs, with their full text —
+# and must not be published. `scripts/prune_cache.py --check` enforces this.
+/data/cache/parsed/531176d05f81f3955cc1f0d4893ec94ede2ebf27e77422eb3b243678af7dc915.v1.json
+/data/cache/reading_paths/531176d05f81f3955cc1f0d4893ec94ede2ebf27e77422eb3b243678af7dc915.*.json
 *.ckpt
 *.pt
 *.bin

@@ -6,9 +6,11 @@ from app.config import get_settings
 
 app = FastAPI(title="AURA Citation Navigator API", version="0.1.0")
 
+# The deployed frontend is on a different origin from the API, so the allowed
+# list is configuration rather than a constant. See .env.example.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=get_settings().origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -7,10 +7,11 @@ uploading the same paper twice is idempotent and costs one cache lookup.
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
 
+from app.api.limits import check_rank_budget
 from app.cache import PaperStore
 from app.core.goals import GOAL_SPECS
 from app.core.pdf_parser import PARSER_VERSION, paper_id_for, parse_pdf
@@ -137,6 +138,7 @@ def list_goals() -> list[dict]:
     summary="Rank a paper's sentences for a reading goal (task 1.6)",
 )
 async def reading_path(
+    request: Request,
     paper_id: str,
     goal: ReadingGoal = Query(description="skim | in-depth | critique"),
     force: bool = Query(False, description="Re-rank even if a cached path exists"),
@@ -154,6 +156,10 @@ async def reading_path(
         cached = store.load_reading_path(paper_id, PARSER_VERSION, goal, RANKER_VERSION)
         if cached is not None:
             return cached
+
+    # Only an actual LLM call costs budget. Checked after the cache lookup, so
+    # browsing the pre-ranked samples is never rate limited.
+    check_rank_budget(request)
 
     try:
         result = await build_reading_path(paper, goal, client)
