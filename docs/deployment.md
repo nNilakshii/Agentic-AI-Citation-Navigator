@@ -36,10 +36,24 @@ git add data/cache/parsed data/cache/reading_paths
 
 ## Backend → Hugging Face Spaces
 
-1. Create a Space: **Docker → Blank**, name it, keep it public.
-2. Point it at this repo, or push this repo to the Space's git remote. The
-   `Dockerfile` at the repo root is what it builds.
-3. Space **Settings → Variables and secrets**:
+A Space is a git repo that HF builds. There is no "connect my GitHub repo" button
+for Docker Spaces — you push to the Space's own remote, so this repo ends up with
+two remotes (`origin` on GitHub, `hf` on Hugging Face).
+
+The root `README.md` carries YAML frontmatter (`sdk: docker`, `app_port: 7860`)
+because that is how a Space learns what it is. GitHub renders it as a small table;
+that is the cost of deploying from one repo.
+
+1. Create a Space: **Docker → Blank**, public, CPU basic (free).
+2. Create a **write** access token at huggingface.co/settings/tokens.
+3. Add the remote and push:
+
+   ```bash
+   git remote add hf https://huggingface.co/spaces/<user>/<space>
+   git push hf main          # username = HF username, password = the token
+   ```
+
+4. Space **Settings → Variables and secrets**:
 
    | Name | Kind | Value |
    |---|---|---|
