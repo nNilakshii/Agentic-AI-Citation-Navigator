@@ -8,7 +8,7 @@ only answer with those numbers; every id it returns is checked against the
 paper and dropped if unknown, and the span and text of each item come from the
 parse rather than the response. So a reading path cannot contain a sentence the
 paper does not have, no matter what the model emits. That is the project's
-grounding rule (``CLAUDE.md``) enforced at the one place it can be.
+grounding rule enforced at the one place it can be.
 
 Long papers are split into batches, each ranked concurrently against the same
 goal, then merged and trimmed to the goal's budget. Batches follow section

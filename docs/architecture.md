@@ -1,7 +1,7 @@
 # Architecture
 
-Decisions and their rationale, recorded as they're made. See root `CLAUDE.md` for the
-build order and `docs/TASKS.md` for status.
+Decisions and their rationale, recorded as they're made. See `docs/TASKS.md` for the
+build order and status.
 
 ---
 

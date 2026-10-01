@@ -16,4 +16,4 @@ def evaluate(predictions: list[dict], gold: list[dict]) -> dict:
 
 
 if __name__ == "__main__":
-    raise SystemExit("Phase 3 stub - nothing to run yet. See CLAUDE.md build order.")
+    raise SystemExit("Phase 3 stub - nothing to run yet. See docs/TASKS.md for the build order.")

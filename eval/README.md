@@ -1,7 +1,7 @@
 # eval
 
 Evaluation harnesses, one per measured capability. Nothing runs until real data lands in
-`data/` and the corresponding backend feature exists — see `CLAUDE.md` for phase order.
+`data/` and the corresponding backend feature exists — see `docs/TASKS.md` for phase order.
 
 - `localization/` — CL-SciSumm cited-span localization accuracy (Phase 2).
 - `intent/` — SciCite citation-intent classification (Phase 3).
