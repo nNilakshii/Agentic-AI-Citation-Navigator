@@ -1,11 +1,17 @@
 /**
  * Client for the reader API (backend Phase 1.2).
  *
- * Requests go to a relative /api path, which Vite proxies to the backend in
- * development — so there is no host to configure and no CORS in the loop.
+ * In development, requests go to a relative /api path that Vite proxies to the
+ * backend — no host to configure and no CORS in the loop. In a deployed build
+ * the two halves live on different origins (the page on GitHub Pages, the API
+ * on its own host), so VITE_API_BASE supplies the absolute origin at build
+ * time and the backend allows it by CORS.
  */
 
-const BASE = "/api/reader";
+/** Origin of the backend. Empty in dev, where the proxy handles it. */
+const ORIGIN = (import.meta.env?.VITE_API_BASE ?? "").replace(/\/$/, "");
+
+const BASE = `${ORIGIN}/api/reader`;
 
 /** What to tell someone whose backend is not answering. */
 export const UNREACHABLE =
@@ -74,7 +80,7 @@ async function request(path, options = {}) {
  */
 export async function isBackendUp() {
   try {
-    const response = await fetch("/health");
+    const response = await fetch(`${ORIGIN}/health`);
     if (!response.ok) return false;
     const body = await response.json();
     return body?.status === "ok";

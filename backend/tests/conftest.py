@@ -4,6 +4,25 @@
 import pymupdf
 import pytest
 
+from app.api.limits import reset_budgets
+from app.config import get_settings
+
+
+@pytest.fixture(autouse=True)
+def isolate_rank_budget():
+    """Keep the per-client ranking budget from leaking between tests.
+
+    It is deliberately process state (one backend process, guarding a shared
+    quota), so without this a test that ranks a few papers silently spends the
+    budget for every test after it.
+    """
+    reset_budgets()
+    get_settings.cache_clear()
+    yield
+    reset_budgets()
+    get_settings.cache_clear()
+
+
 BODY_SIZE = 10.0
 HEADING_SIZE = 13.0
 TITLE_SIZE = 18.0

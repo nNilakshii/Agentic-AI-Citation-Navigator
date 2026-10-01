@@ -32,6 +32,17 @@ class Settings(BaseSettings):
     semantic_scholar_api_key: str | None = None
     openalex_email: str | None = None
 
+    #: Comma-separated origins allowed to call the API. The deployed frontend
+    #: lives on a different host from the backend, so it must be named here.
+    allowed_origins: str = "http://localhost:5173"
+    #: Live rankings allowed per client per hour. Only *uncached* rankings
+    #: count, so browsing the pre-ranked samples is never limited. Guards the
+    #: shared free-tier quota from a single visitor on a public deployment.
+    rank_limit_per_hour: int = 6
+
+    def origins(self) -> list[str]:
+        return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+
     def configured(self) -> dict[str, bool]:
         """Which keys have a non-empty, non-placeholder value."""
         return {
