@@ -233,6 +233,44 @@ reminder that prompt changes are cache-invalidating events and want batching.
 
 ---
 
+## Task 1.9 — connection and loading states
+
+### A dead backend reported itself as a backend bug
+
+Stopping uvicorn produced "Request failed (500)", not the "cannot reach the backend"
+message `api.js` had been carrying since 1.2. The cause: Vite proxies `/api`, so when
+uvicorn is down it is *Vite* that answers, with its own plain-text 500. `fetch` therefore
+succeeds, `response.ok` is false, the body is not JSON, and it falls through to the
+generic status message. The good branch only runs where there is no proxy — i.e. in a
+production build, which is exactly where it is least likely to be read.
+
+Fix: a non-JSON 5xx is read as unreachable; a 5xx carrying FastAPI's `detail` stays a real
+backend error, so an exhausted LLM quota is still reported as itself.
+
+**Worth generalising:** a dev-only proxy can mask the very failure mode the error handling
+was written for. Test the "dependency is down" path with the proxy in place, not just by
+mocking a rejected fetch.
+
+### A 62-second wait is indistinguishable from broken
+
+Reported as a bug: "upload my local pdf, it doesn't do any path extractions." It did — 38
+passages, cached, correct. The upload was at 22:51:10 and the path landed at 22:52:12.
+
+The cause was self-inflicted: the 1.10 QA sweep (~30 calls) was running at the same time
+and had consumed the 5/min quota, so the interactive ranking spent a minute backing off.
+Nothing on screen changed during it.
+
+Two fixes. The status now shows a **ticking elapsed count**, because a number that moves is
+the cheapest possible proof that a wait is not a hang; and the QA script warns that a full
+sweep starves interactive use.
+
+**The real lesson is about shared quota as a resource.** Background evaluation and the live
+app draw on the same 5/min budget, and the batch job silently wins. Phase 2's CL-SciSumm
+harness and Phase 3's faithfulness eval will be far bigger than 30 calls — they need either
+their own key, or a run mode that will not start while the server is serving.
+
+---
+
 ## Patterns worth carrying forward
 
 1. **Unit tests caught the logic; only a live run caught the damage.** Every bug in B and C
