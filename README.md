@@ -1,3 +1,13 @@
+---
+title: AURA Citation Navigator API
+emoji: 📚
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # AURA Citation Navigator
 
 An adaptive research-paper reading assistant. AURA helps readers move through dense

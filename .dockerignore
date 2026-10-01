@@ -1,0 +1,26 @@
+# Keep the build context small and the image clean.
+#
+# The Dockerfile copies backend/ and data/ wholesale, which without this would
+# drag in the local virtualenv (hundreds of MB), the gitignored sample PDFs
+# (refetched at build), and every cached artifact from local use.
+
+**/.venv/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+
+frontend/
+.git/
+.github/
+docs/
+eval/
+
+# Sample PDFs are refetched at build time; cached PDFs and any locally-opened
+# paper must not travel into a public image. The committed parses and reading
+# paths under data/cache/ are the exception — those are the point.
+data/samples/*.pdf
+data/cache/pdfs/
+
+.env
+.env.*
+!.env.example
