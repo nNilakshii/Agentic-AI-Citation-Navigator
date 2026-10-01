@@ -18,8 +18,8 @@ run resumes where the last stopped.
 
 Usage (backend/, venv active, server NOT required):
 
+    python scripts/qa_reading_paths.py --cached-only    # report, no API calls
     python scripts/qa_reading_paths.py --max-calls 15   # a day's worth
-    python scripts/qa_reading_paths.py                  # check what is cached
     python scripts/qa_reading_paths.py --papers bert.pdf
     python scripts/qa_reading_paths.py --force          # ignore cached paths
 """
@@ -58,6 +58,12 @@ async def main() -> int:
     parser.add_argument("--papers", nargs="*", help="Sample filenames; default all")
     parser.add_argument("--force", action="store_true", help="Ignore cached paths")
     parser.add_argument(
+        "--cached-only",
+        action="store_true",
+        help="Check what is already cached and make no API calls at all. Use "
+        "this to see coverage without spending the day's quota.",
+    )
+    parser.add_argument(
         "--max-calls",
         type=int,
         default=0,
@@ -70,7 +76,7 @@ async def main() -> int:
     # in one sitting. Run it while someone is using the reader and *their*
     # ranking queues behind it — measured at 62s for one upload, which is
     # indistinguishable from the app being broken.
-    if not args.papers:
+    if not args.papers and not args.cached_only:
         print(
             "Note: the free tier allows 20 rankings a day, shared with anything\n"
             "      else using this key. Don't run this while using the reader —\n"
@@ -116,6 +122,9 @@ async def main() -> int:
                 result = cached
                 live = False
             else:
+                if args.cached_only:
+                    stopped_early = True
+                    continue
                 if args.max_calls and live_calls >= args.max_calls:
                     stopped_early = True
                     continue
@@ -207,9 +216,10 @@ async def main() -> int:
     )
     if stopped_early:
         remaining = len(names) * 3 - len(rows)
+        why = "nothing was ranked live" if args.cached_only else "the --max-calls limit"
         print(
-            f"Stopped at the --max-calls limit with ~{remaining} ranking(s) still "
-            "to build.\nRun again tomorrow to continue — cached work is not redone."
+            f"Stopped at {why} with ~{remaining} ranking(s) still to build.\n"
+            "Run `--max-calls 15` tomorrow to continue — cached work is not redone."
         )
     if problems:
         print(f"\n{len(problems)} problem(s):")

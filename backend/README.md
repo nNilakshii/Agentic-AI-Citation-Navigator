@@ -76,7 +76,8 @@ pytest
 ## Quality gate across the sample papers (Phase 1.10)
 
 ```bash
-python scripts/qa_reading_paths.py                    # all 10 samples, 3 goals
+python scripts/qa_reading_paths.py --cached-only      # report only, no API calls
+python scripts/qa_reading_paths.py --max-calls 15     # build a day's worth
 python scripts/qa_reading_paths.py --papers bert.pdf  # one paper
 python scripts/qa_reading_paths.py --force            # ignore cached paths
 ```
