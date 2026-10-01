@@ -7,14 +7,45 @@
  * backend already returns belong in the 1.8 explanation panel.
  */
 
+import { useEffect, useState } from "react";
+
 import { isPartial, pathSummary } from "../lib/readingPath.js";
 
+/**
+ * When a wait stops looking like latency and starts looking like a hang.
+ *
+ * A cold ranking is ~5s. Beyond this the backend is almost certainly sitting
+ * out a rate limit — free-tier Gemini answers a 429 with a ~45s retryDelay and
+ * the client waits exactly that long — so the reader deserves to be told the
+ * difference between "working" and "queued behind a quota".
+ */
+const SLOW_AFTER_MS = 8000;
+
 export default function ReadingPathStatus({ path, busy, error, onRetry }) {
+  const [slow, setSlow] = useState(false);
+
+  useEffect(() => {
+    if (!busy) {
+      setSlow(false);
+      return undefined;
+    }
+    const timer = setTimeout(() => setSlow(true), SLOW_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, [busy]);
+
   if (busy) {
     return (
-      <p className="sidebar__hint" role="status">
-        Finding your reading path…
-      </p>
+      <div className="path-status">
+        <p className="sidebar__hint" role="status">
+          Finding your reading path…
+        </p>
+        {slow && (
+          <p className="path-status__waiting">
+            Still going. The free API tier allows 5 requests a minute, so this
+            can wait up to a minute before it retries.
+          </p>
+        )}
+      </div>
     );
   }
 

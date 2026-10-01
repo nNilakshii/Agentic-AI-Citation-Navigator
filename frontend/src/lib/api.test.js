@@ -74,7 +74,11 @@ describe("error handling", () => {
     await expect(api.listSamples()).rejects.toThrow("notes.txt is not a PDF");
   });
 
-  it("keeps a status-based message when the body is not JSON", async () => {
+  it("reads a non-JSON 5xx as a dead backend, not a backend bug", async () => {
+    // Regression (1.9): the dev server proxies /api, so when uvicorn is down it
+    // is Vite that answers — with a plain-text 500. The reader used to report
+    // "Request failed (500)", which reads like the backend returned an error
+    // rather than never having been reached.
     mockFetch({
       ok: false,
       status: 500,
@@ -82,12 +86,39 @@ describe("error handling", () => {
         throw new Error("not json");
       },
     });
-    await expect(api.listSamples()).rejects.toThrow("Request failed (500)");
+
+    await expect(api.listSamples()).rejects.toThrow(/Cannot reach the backend/);
   });
 
-  it("explains an unreachable backend", async () => {
+  it("keeps a real backend error even on a gateway-ish status", async () => {
+    // FastAPI always answers errors as {"detail": ...}, so a 502 carrying one
+    // is the backend talking — an exhausted LLM quota, say — and must not be
+    // relabelled as "backend down".
+    mockFetch({
+      ok: false,
+      status: 502,
+      json: async () => ({ detail: "quota exhausted" }),
+    });
+
+    await expect(api.listSamples()).rejects.toThrow("quota exhausted");
+  });
+
+  it("keeps a status-based message for a non-gateway status", async () => {
+    mockFetch({
+      ok: false,
+      status: 418,
+      json: async () => {
+        throw new Error("not json");
+      },
+    });
+
+    await expect(api.listSamples()).rejects.toThrow("Request failed (418)");
+  });
+
+  it("explains an unreachable backend, with the command to start it", async () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
-    await expect(api.listSamples()).rejects.toThrow(/Is uvicorn running\?/);
+
+    await expect(api.listSamples()).rejects.toThrow(/uvicorn app.main:app/);
   });
 
   it("carries the HTTP status on the error", async () => {
@@ -129,5 +160,33 @@ describe("fetchReadingPath (1.7)", () => {
     await expect(api.fetchReadingPath("abc", "skim")).rejects.toThrow(
       "quota exhausted",
     );
+  });
+});
+
+describe("isBackendUp (1.9)", () => {
+  it("is true when health reports ok", async () => {
+    mockFetch({ ok: true, json: async () => ({ status: "ok" }) });
+    expect(await api.isBackendUp()).toBe(true);
+  });
+
+  it("is false when the request fails outright", async () => {
+    globalThis.fetch = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    expect(await api.isBackendUp()).toBe(false);
+  });
+
+  it("is false when the proxy answers for a dead backend", async () => {
+    mockFetch({
+      ok: false,
+      status: 500,
+      json: async () => {
+        throw new Error("not json");
+      },
+    });
+    expect(await api.isBackendUp()).toBe(false);
+  });
+
+  it("never throws, so a mount check cannot break the app", async () => {
+    mockFetch({ ok: true, json: async () => { throw new Error("garbage"); } });
+    await expect(api.isBackendUp()).resolves.toBe(false);
   });
 });

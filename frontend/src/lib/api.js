@@ -7,6 +7,18 @@
 
 const BASE = "/api/reader";
 
+/** What to tell someone whose backend is not answering. */
+export const UNREACHABLE =
+  "Cannot reach the backend. Start it with: uvicorn app.main:app --reload --port 8000";
+
+/**
+ * Statuses a dead upstream can arrive as. The dev server proxies /api, so when
+ * uvicorn is down it is *Vite* that answers — with its own plain-text 5xx, not
+ * a thrown fetch. Without this the reader reports "Request failed (500)", which
+ * reads like a backend bug rather than a backend that is not running.
+ */
+const GATEWAY_STATUSES = new Set([500, 502, 503, 504]);
+
 class ApiError extends Error {
   constructor(message, status) {
     super(message);
@@ -28,20 +40,47 @@ async function request(path, options = {}) {
   try {
     response = await fetch(path, options);
   } catch (cause) {
-    throw new ApiError("Cannot reach the backend. Is uvicorn running?", 0);
+    // No proxy in the way (a production build), so the failure surfaces here.
+    throw new ApiError(UNREACHABLE, 0);
   }
 
   if (!response.ok) {
-    let detail = `Request failed (${response.status})`;
+    let detail = null;
     try {
       const body = await response.json();
       if (body?.detail) detail = String(body.detail);
     } catch {
-      // Not JSON — keep the status-based message.
+      // Not JSON. FastAPI always answers errors as {"detail": ...}, so a
+      // non-JSON 5xx did not come from the backend at all.
     }
-    throw new ApiError(detail, response.status);
+    if (detail === null && GATEWAY_STATUSES.has(response.status)) {
+      throw new ApiError(UNREACHABLE, 0);
+    }
+    throw new ApiError(
+      detail ?? `Request failed (${response.status})`,
+      response.status,
+    );
   }
   return response.json();
+}
+
+/**
+ * Is the backend answering?
+ *
+ * Used on mount so the reader can say what is wrong before the first click,
+ * rather than after it.
+ *
+ * @returns {Promise<boolean>}
+ */
+export async function isBackendUp() {
+  try {
+    const response = await fetch("/health");
+    if (!response.ok) return false;
+    const body = await response.json();
+    return body?.status === "ok";
+  } catch {
+    return false;
+  }
 }
 
 /** Names of the PDFs in data/samples. */

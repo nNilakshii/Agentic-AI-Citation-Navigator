@@ -485,6 +485,13 @@ button:disabled {
   color: #92400e;
 }
 
+.path-status__waiting {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
 .path-status__retry {
   padding: 0;
   border: 0;
@@ -600,4 +607,36 @@ button:disabled {
   font-size: 0.7rem;
   font-style: italic;
   color: var(--muted);
+}
+
+/* --- connection banner (1.9) ---------------------------------------- */
+
+.connection {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid #fecaca;
+  background: #fef2f2;
+  font-size: 0.8rem;
+  color: #7f1d1d;
+}
+
+.connection__cmd {
+  display: block;
+  margin-top: 0.3rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  color: #991b1b;
+}
+
+.connection__retry {
+  margin-left: auto;
+  flex: none;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid #b91c1c;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 0.78rem;
+  color: #b91c1c;
 }

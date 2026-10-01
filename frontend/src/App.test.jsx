@@ -37,6 +37,7 @@ beforeEach(() => {
   api.uploadPaper.mockResolvedValue(paper);
   api.pdfUrl.mockImplementation((id) => `/api/reader/papers/${id}/pdf`);
   api.fetchReadingPath.mockResolvedValue(readingPath);
+  api.isBackendUp.mockResolvedValue(true);
 });
 
 /**
@@ -551,6 +552,71 @@ describe("the explanation panel (1.8)", () => {
     await waitFor(() =>
       expect(document.querySelector('[aria-current="true"].explain__item')).toBeNull(),
     );
+  });
+});
+
+describe("the backend connection (1.9)", () => {
+  it("says the backend is down before the first click, not after", async () => {
+    api.isBackendUp.mockResolvedValue(false);
+
+    render(<App />);
+
+    expect(await screen.findByText(/backend isn.t running/i)).toBeInTheDocument();
+    // And it carries the command, rather than describing the problem.
+    expect(screen.getByText(/uvicorn app.main:app/)).toBeInTheDocument();
+  });
+
+  it("does not ask for samples when the backend is down", async () => {
+    api.isBackendUp.mockResolvedValue(false);
+
+    render(<App />);
+    await screen.findByText(/backend isn.t running/i);
+
+    expect(api.listSamples).not.toHaveBeenCalled();
+  });
+
+  it("shows no banner while the first check is still in flight", async () => {
+    api.isBackendUp.mockReturnValue(new Promise(() => {}));
+
+    render(<App />);
+
+    // A banner that flashes on every load would be worse than none.
+    expect(screen.queryByText(/backend isn.t running/i)).not.toBeInTheDocument();
+  });
+
+  it("recovers when the backend comes back", async () => {
+    api.isBackendUp.mockResolvedValue(false);
+    render(<App />);
+    await screen.findByText(/backend isn.t running/i);
+
+    api.isBackendUp.mockResolvedValue(true);
+    await userEvent.click(screen.getByRole("button", { name: "Reconnect" }));
+
+    await waitFor(() =>
+      expect(screen.queryByText(/backend isn.t running/i)).not.toBeInTheDocument(),
+    );
+    expect(await screen.findByRole("button", { name: "bert" })).toBeInTheDocument();
+  });
+
+  it("warns about the rate limit when ranking runs long", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      api.fetchReadingPath.mockReturnValue(new Promise(() => {}));
+      const sample = await renderApp();
+      await userEvent.click(sample);
+      await screen.findByRole("dialog");
+      await userEvent.click(screen.getByRole("button", { name: /^Start reading/ }));
+      await screen.findByText(/Finding your reading path/);
+
+      // Under ~8s it is just latency; past it, the backend is almost certainly
+      // sitting out a 429 and the reader should be told which.
+      expect(screen.queryByText(/5 requests a minute/)).not.toBeInTheDocument();
+      await vi.advanceTimersByTimeAsync(9000);
+
+      expect(await screen.findByText(/5 requests a minute/)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

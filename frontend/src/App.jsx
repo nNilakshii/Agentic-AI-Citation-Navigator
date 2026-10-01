@@ -1,5 +1,5 @@
 /**
- * AURA Citation Navigator — reader shell (tasks 1.3-1.8).
+ * AURA Citation Navigator — reader shell (tasks 1.3-1.9).
  *
  * Sidebar: pick a paper, pick a reading goal, navigate the section outline.
  * Main:    the PDF, scrolling continuously, with the reading path highlighted.
@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import ConnectionBanner from "./components/ConnectionBanner.jsx";
 import ExplanationPanel from "./components/ExplanationPanel.jsx";
 import GoalModal from "./components/GoalModal.jsx";
 import GoalPicker from "./components/GoalPicker.jsx";
@@ -48,14 +49,35 @@ export default function App() {
   // would not: React bails out of a state update that changes nothing.
   const [pathAttempt, setPathAttempt] = useState(0);
   const [activePathId, setActivePathId] = useState(null);
+  // null = not checked yet, so the banner never flashes before the first answer.
+  const [backendUp, setBackendUp] = useState(null);
+  const [reconnecting, setReconnecting] = useState(false);
   const jumpedAt = useRef(0);
 
-  useEffect(() => {
-    api
-      .listSamples()
-      .then(setSamples)
-      .catch((cause) => setError(cause.message));
+  const connect = useCallback(async () => {
+    const up = await api.isBackendUp();
+    setBackendUp(up);
+    if (!up) return;
+    try {
+      setSamples(await api.listSamples());
+      setError(null);
+    } catch (cause) {
+      setError(cause.message);
+    }
   }, []);
+
+  useEffect(() => {
+    connect();
+  }, [connect]);
+
+  const handleReconnect = useCallback(async () => {
+    setReconnecting(true);
+    try {
+      await connect();
+    } finally {
+      setReconnecting(false);
+    }
+  }, [connect]);
 
   const load = useCallback(async (loader) => {
     setBusy(true);
@@ -208,6 +230,10 @@ export default function App() {
       </aside>
 
       <main className="reader">
+        {backendUp === false && (
+          <ConnectionBanner onRetry={handleReconnect} retrying={reconnecting} />
+        )}
+
         <header className="reader__header">
           <div>
             <h2>{paper?.source?.title ?? "No paper open"}</h2>
