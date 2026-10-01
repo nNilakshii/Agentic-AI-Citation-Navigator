@@ -4,7 +4,7 @@
  * Each entry pairs a plain-language restatement with the sentence it came
  * from. That pairing is the grounding: the explanation is generated prose and
  * the sentence is the evidence for it, so the reader can always check one
- * against the other without leaving the panel (``CLAUDE.md``). An explanation
+ * against the other without leaving the panel. An explanation
  * is never shown on its own, and a missing one degrades to the sentence rather
  * than to empty space.
  *

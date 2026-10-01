@@ -1,3 +1,7 @@
+# Local assistant context. Kept on disk so the build order and conventions are
+# available while working, deliberately not published.
+CLAUDE.md
+
 # Secrets
 .env
 .env.local
