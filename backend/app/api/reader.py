@@ -76,6 +76,43 @@ def list_samples() -> list[str]:
     return sorted(path.name for path in SAMPLES_DIR.glob("*.pdf"))
 
 
+@router.get(
+    "/coverage",
+    summary="Which sample papers already have a reading path, per goal",
+)
+def coverage(store: PaperStore = Depends(get_store)) -> list[dict]:
+    """Report what can be opened instantly, so the UI can say so up front.
+
+    A paper with a cached path for a goal opens with no LLM call: instant, and
+    free against the daily budget. One without needs a live ranking, which on
+    a free tier means seconds of waiting or — once the day's budget is gone —
+    nothing at all. The reader should be able to show that difference *before*
+    someone clicks, rather than leaving them to discover it.
+
+    Derived from the parse cache rather than by hashing the sample PDFs on
+    every request: a paper that was never parsed has no path either way.
+    """
+    goals = [goal.value for goal in ReadingGoal]
+    rows = []
+    for paper in store.list_parsed(PARSER_VERSION):
+        ready = [
+            goal
+            for goal in goals
+            if store.load_reading_path(
+                paper.paper_id, PARSER_VERSION, ReadingGoal(goal), RANKER_VERSION
+            )
+            is not None
+        ]
+        rows.append(
+            {
+                "filename": paper.source.filename,
+                "paper_id": paper.paper_id,
+                "ready": ready,
+            }
+        )
+    return rows
+
+
 @router.get("/papers", response_model=list[PaperSummary], summary="List parsed papers")
 def list_papers(store: PaperStore = Depends(get_store)) -> list[PaperSummary]:
     return [paper.summary() for paper in store.list_parsed(PARSER_VERSION)]

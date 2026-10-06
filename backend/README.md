@@ -40,6 +40,7 @@ returns the ones worth reading, each with a span, an importance and a one-line r
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/reader/goals` | The goals and what each one surfaces |
+| `GET` | `/api/reader/coverage` | Which papers already have a path, per goal — what opens instantly |
 | `POST` | `/api/reader/papers/{paper_id}/reading-path?goal=skim` | Rank (cached; `&force=true` to re-rank) |
 | `GET` | `/api/reader/papers/{paper_id}/reading-path?goal=skim` | The cached path — never spends LLM quota |
 

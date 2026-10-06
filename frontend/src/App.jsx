@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import BudgetNotice from "./components/BudgetNotice.jsx";
 import ConnectionBanner from "./components/ConnectionBanner.jsx";
 import ExplanationPanel from "./components/ExplanationPanel.jsx";
 import GoalModal from "./components/GoalModal.jsx";
@@ -52,14 +53,23 @@ export default function App() {
   // null = not checked yet, so the banner never flashes before the first answer.
   const [backendUp, setBackendUp] = useState(null);
   const [reconnecting, setReconnecting] = useState(false);
+  const [coverage, setCoverage] = useState(null);
+  const [budgetLeft, setBudgetLeft] = useState(null);
   const jumpedAt = useRef(0);
 
   const connect = useCallback(async () => {
-    const up = await api.isBackendUp();
-    setBackendUp(up);
-    if (!up) return;
+    const status = await api.fetchStatus();
+    setBackendUp(status !== null);
+    if (status === null) return;
+    setBudgetLeft(status.rankings_left_today ?? null);
     try {
-      setSamples(await api.listSamples());
+      const [sampleNames, rows] = await Promise.all([
+        api.listSamples(),
+        // Not fatal: without it the picker simply marks nothing.
+        api.fetchCoverage().catch(() => null),
+      ]);
+      setSamples(sampleNames);
+      setCoverage(rows);
       setError(null);
     } catch (cause) {
       setError(cause.message);
@@ -129,7 +139,17 @@ export default function App() {
         setPathError(cause.message);
       })
       .finally(() => {
-        if (current) setPathBusy(false);
+        if (!current) return;
+        setPathBusy(false);
+        // A live ranking changes both: this paper is now ready, and the day's
+        // budget is one smaller. Cheap, and keeps the markers honest.
+        api.fetchStatus().then((s) => {
+          if (current && s) setBudgetLeft(s.rankings_left_today ?? null);
+        });
+        api.fetchCoverage().then(
+          (rows) => current && setCoverage(rows),
+          () => {},
+        );
       });
 
     return () => {
@@ -198,9 +218,13 @@ export default function App() {
           samples={samples}
           currentFilename={paper?.source?.filename}
           busy={busy}
+          coverage={coverage}
+          goalId={goalId}
           onPickSample={(name) => load(() => api.parseSample(name))}
           onUpload={(file) => load(() => api.uploadPaper(file))}
         />
+
+        <BudgetNotice remaining={budgetLeft} />
 
         <GoalPicker
           goalId={goalId}

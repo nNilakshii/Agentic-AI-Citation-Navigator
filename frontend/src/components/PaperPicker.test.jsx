@@ -52,3 +52,63 @@ describe("PaperPicker", () => {
     expect(screen.queryByText("Sample papers")).not.toBeInTheDocument();
   });
 });
+
+describe("readiness markers", () => {
+  const coverage = [
+    { filename: "attention-is-all-you-need.pdf", ready: ["skim", "critique"] },
+    { filename: "bert.pdf", ready: [] },
+  ];
+
+  function renderWithCoverage(goalId = "skim") {
+    render(
+      <PaperPicker
+        samples={["attention-is-all-you-need.pdf", "bert.pdf"]}
+        coverage={coverage}
+        goalId={goalId}
+        onPickSample={() => {}}
+        onUpload={() => {}}
+      />,
+    );
+  }
+
+  it("marks a paper ready only for the goals it has a path for", () => {
+    renderWithCoverage("skim");
+
+    const buttons = screen.getAllByRole("button", { name: /attention|bert/ });
+    expect(buttons[0].textContent).toContain("ready");
+    expect(buttons[1].textContent).toContain("new");
+  });
+
+  it("re-marks when the goal changes", () => {
+    // Attention has skim and critique, not in-depth.
+    renderWithCoverage("in-depth");
+
+    expect(
+      screen.getByRole("button", { name: "attention is all you need" }).textContent,
+    ).toContain("new");
+  });
+
+  it("keeps the badge out of the accessible name", () => {
+    // Regression: the badge text joined the button's name, so every test and
+    // every screen reader saw "attention is all you need ready".
+    renderWithCoverage("skim");
+
+    const button = screen.getByRole("button", { name: "attention is all you need" });
+    expect(button).toBeInTheDocument();
+    expect(button.title).toMatch(/instantly/);
+  });
+
+  it("marks nothing until coverage is known", () => {
+    render(
+      <PaperPicker
+        samples={["attention-is-all-you-need.pdf"]}
+        coverage={null}
+        goalId="skim"
+        onPickSample={() => {}}
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "attention is all you need" });
+    expect(button.textContent).not.toMatch(/ready|new/);
+  });
+});
