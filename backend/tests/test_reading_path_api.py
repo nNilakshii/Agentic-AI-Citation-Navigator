@@ -319,3 +319,51 @@ def test_a_complete_path_reports_no_failures_and_is_cached(client, paper_id, tmp
     assert body["n_batches_failed"] == 0
     assert body["n_batches"] >= 1
     assert list((tmp_path / "reading_paths").glob("*.json"))
+
+
+# --- coverage: what opens instantly ------------------------------------
+
+
+def test_coverage_is_empty_before_anything_is_parsed(client):
+    assert client.get("/api/reader/coverage").json() == []
+
+
+def test_coverage_reports_a_parsed_paper_with_no_paths_yet(client, paper_id):
+    rows = client.get("/api/reader/coverage").json()
+
+    assert len(rows) == 1
+    assert rows[0]["paper_id"] == paper_id
+    assert rows[0]["filename"] == "synthetic.pdf"
+    assert rows[0]["ready"] == []
+
+
+def test_coverage_lists_only_the_goals_actually_cached(client, paper_id):
+    rank(client, paper_id, goal="skim")
+    rank(client, paper_id, goal="critique")
+
+    ready = client.get("/api/reader/coverage").json()[0]["ready"]
+
+    assert set(ready) == {"skim", "critique"}
+    assert "in-depth" not in ready
+
+
+def test_coverage_never_spends_quota(client, paper_id, llm):
+    rank(client, paper_id, goal="skim")
+    before = llm.calls
+
+    for _ in range(3):
+        client.get("/api/reader/coverage")
+
+    assert llm.calls == before
+
+
+def test_a_failed_ranking_does_not_show_as_ready(client, paper_id):
+    # The whole point of the marker is "this opens instantly". A path that was
+    # never cached must not claim otherwise.
+    app.dependency_overrides[get_llm_client] = lambda: FakeLLM(
+        error=LLMError("upstream down")
+    )
+
+    rank(client, paper_id, goal="skim")
+
+    assert client.get("/api/reader/coverage").json()[0]["ready"] == []

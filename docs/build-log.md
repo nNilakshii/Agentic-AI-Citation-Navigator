@@ -330,6 +330,12 @@ day's quota.
 6. **Watch a cold run, not just a warm one.** The wasted duplicate call in 1.7 was
    invisible with everything cached; it only showed up on a paper that had never been
    ranked.
-7. **Read *which* limit an API names.** Four tasks were designed against a 5-per-minute
+7. **An accessible name is an API.** Three times now a new control has changed the
+   accessible name of an existing one and broken tests — the goal modal's "Skim" against
+   the sidebar's, the explanation panel's passages against the outline's, and a readiness
+   badge joining its button's name. The fix each time was to keep the name stable and put
+   the new information somewhere else: a different role, a scoped query, `aria-hidden`
+   plus `title`. Worth doing pre-emptively.
+8. **Read *which* limit an API names.** Four tasks were designed against a 5-per-minute
    limit that was never the binding one. A rate limit and a daily quota are the same 429
    at the call site and want opposite responses.

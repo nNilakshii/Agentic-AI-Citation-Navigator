@@ -182,6 +182,42 @@ button:disabled {
   background: var(--page-bg);
 }
 
+/* Sample rows carry a readiness tag, so the label needs to yield space. */
+.picker__sample {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.picker__sample-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picker__ready,
+.picker__slow {
+  flex: none;
+  padding: 0.05rem 0.3rem;
+  border-radius: 999px;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.picker__ready {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.picker__slow {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
 .picker__sample--active {
   background: var(--accent-soft);
   color: var(--accent);
@@ -639,4 +675,26 @@ button:disabled {
   background: #fff;
   font-size: 0.78rem;
   color: #b91c1c;
+}
+
+/* --- daily budget notice -------------------------------------------- */
+
+.budget {
+  margin: 0;
+  padding: 0.5rem 0.6rem;
+  border-radius: 7px;
+  background: var(--page-bg);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.budget--out {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.budget em {
+  font-style: normal;
+  font-weight: 600;
 }

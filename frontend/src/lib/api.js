@@ -79,19 +79,42 @@ async function request(path, options = {}) {
  * @returns {Promise<boolean>}
  */
 export async function isBackendUp() {
+  return (await fetchStatus()) !== null;
+}
+
+/**
+ * The backend's health, including how many live rankings remain today.
+ *
+ * Returns `null` when the backend cannot be reached, so a caller can tell
+ * "down" from "up but out of budget" — the two look identical to a reader
+ * otherwise, and only one of them is worth waiting out.
+ *
+ * @returns {Promise<{status: string, rankings_left_today: number}|null>}
+ */
+export async function fetchStatus() {
   try {
     const response = await fetch(`${ORIGIN}/health`);
-    if (!response.ok) return false;
+    if (!response.ok) return null;
     const body = await response.json();
-    return body?.status === "ok";
+    return body?.status === "ok" ? body : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
 /** Names of the PDFs in data/samples. */
 export function listSamples() {
   return request(`${BASE}/samples`);
+}
+
+/**
+ * Which papers already have a reading path, per goal.
+ *
+ * Lets the picker say which papers open instantly, before anything is
+ * clicked. Shape: `[{filename, paper_id, ready: ["skim", ...]}]`.
+ */
+export function fetchCoverage() {
+  return request(`${BASE}/coverage`);
 }
 
 /** Summaries of every paper already parsed and cached. */

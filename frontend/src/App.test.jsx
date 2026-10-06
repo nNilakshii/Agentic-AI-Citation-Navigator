@@ -37,7 +37,11 @@ beforeEach(() => {
   api.uploadPaper.mockResolvedValue(paper);
   api.pdfUrl.mockImplementation((id) => `/api/reader/papers/${id}/pdf`);
   api.fetchReadingPath.mockResolvedValue(readingPath);
-  api.isBackendUp.mockResolvedValue(true);
+  api.fetchStatus.mockResolvedValue({ status: "ok", rankings_left_today: 15 });
+  api.fetchCoverage.mockResolvedValue([
+    { filename: "attention-is-all-you-need.pdf", paper_id: paper.paper_id, ready: ["skim"] },
+    { filename: "bert.pdf", paper_id: "b".repeat(64), ready: [] },
+  ]);
 });
 
 /**
@@ -557,7 +561,7 @@ describe("the explanation panel (1.8)", () => {
 
 describe("the backend connection (1.9)", () => {
   it("says the backend is down before the first click, not after", async () => {
-    api.isBackendUp.mockResolvedValue(false);
+    api.fetchStatus.mockResolvedValue(null);
 
     render(<App />);
 
@@ -567,7 +571,7 @@ describe("the backend connection (1.9)", () => {
   });
 
   it("does not ask for samples when the backend is down", async () => {
-    api.isBackendUp.mockResolvedValue(false);
+    api.fetchStatus.mockResolvedValue(null);
 
     render(<App />);
     await screen.findByText(/backend isn.t running/i);
@@ -576,7 +580,7 @@ describe("the backend connection (1.9)", () => {
   });
 
   it("shows no banner while the first check is still in flight", async () => {
-    api.isBackendUp.mockReturnValue(new Promise(() => {}));
+    api.fetchStatus.mockReturnValue(new Promise(() => {}));
 
     render(<App />);
 
@@ -585,11 +589,15 @@ describe("the backend connection (1.9)", () => {
   });
 
   it("recovers when the backend comes back", async () => {
-    api.isBackendUp.mockResolvedValue(false);
+    api.fetchStatus.mockResolvedValue(null);
     render(<App />);
     await screen.findByText(/backend isn.t running/i);
 
-    api.isBackendUp.mockResolvedValue(true);
+    api.fetchStatus.mockResolvedValue({ status: "ok", rankings_left_today: 15 });
+  api.fetchCoverage.mockResolvedValue([
+    { filename: "attention-is-all-you-need.pdf", paper_id: paper.paper_id, ready: ["skim"] },
+    { filename: "bert.pdf", paper_id: "b".repeat(64), ready: [] },
+  ]);
     await userEvent.click(screen.getByRole("button", { name: "Reconnect" }));
 
     await waitFor(() =>
@@ -619,6 +627,68 @@ describe("the backend connection (1.9)", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("knowing what is ready (deployment polish)", () => {
+  it("marks which papers open instantly for the current goal", async () => {
+    await renderApp();
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "attention is all you need" }).textContent,
+      ).toContain("ready"),
+    );
+    expect(screen.getByRole("button", { name: "bert" }).textContent).toContain("new");
+  });
+
+  it("re-marks when the goal changes", async () => {
+    await renderApp();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "attention is all you need" }).textContent,
+      ).toContain("ready"),
+    );
+
+    // The fixture has a path for skim only.
+    await userEvent.click(screen.getByRole("button", { name: "Critique" }));
+
+    expect(
+      screen.getByRole("button", { name: "attention is all you need" }).textContent,
+    ).toContain("new");
+  });
+
+  it("still lists papers when coverage cannot be fetched", async () => {
+    // Nice-to-have, not load-bearing: no markers beats no paper list.
+    api.fetchCoverage.mockRejectedValue(new Error("boom"));
+
+    await renderApp();
+
+    expect(screen.getByRole("button", { name: "bert" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("warns before an upload when the day's budget is gone", async () => {
+    api.fetchStatus.mockResolvedValue({ status: "ok", rankings_left_today: 0 });
+
+    await renderApp();
+
+    expect(await screen.findByText(/No new papers today/)).toBeInTheDocument();
+  });
+
+  it("says nothing about the budget when there is headroom", async () => {
+    await renderApp();
+    expect(screen.queryByText(/No new papers today/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/can be ranked today/)).not.toBeInTheDocument();
+  });
+
+  it("refreshes readiness after a live ranking", async () => {
+    await openSamplePaper();
+    // One fetch on mount, another once the ranking lands — otherwise the
+    // paper just ranked would still show as "new".
+    await waitFor(() =>
+      expect(api.fetchCoverage.mock.calls.length).toBeGreaterThan(1),
+    );
   });
 });
 
