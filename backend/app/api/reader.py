@@ -247,6 +247,13 @@ async def _parse_and_cache(
     if not force:
         cached = store.load_parsed(paper_id, PARSER_VERSION)
         if cached is not None:
+            # A cached parse does not imply cached bytes. The deployed image
+            # ships parses but not PDFs (they are refetched at build into
+            # data/samples, not data/cache/pdfs), so on a fresh container the
+            # parse hit returned here while GET /pdf 404'd and the reader
+            # rendered nothing. We already hold the bytes; store them.
+            if store.load_pdf(paper_id) is None:
+                store.save_pdf(paper_id, pdf_bytes)
             return cached
 
     # Parsing is CPU-bound and takes seconds on a long paper; keep it off the
