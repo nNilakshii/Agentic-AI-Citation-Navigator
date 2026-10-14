@@ -1,135 +1,245 @@
 # Deploying the reader
 
-Two halves, two hosts. The frontend is a static bundle; the backend is Python and
-holds the Gemini key, so it needs a real server and the key never reaches the browser.
+Written to be followed start to finish by someone who has not deployed anything before.
 
-| Half | Where | Why |
+## What you are building
+
+Two halves, two hosts, because they need different things:
+
+| Half | Goes to | Why |
 |---|---|---|
-| Reader UI | GitHub Pages | Already have a Pages site; a static bundle is all it needs |
-| API | a container host | The Dockerfile reads `$PORT`, so any of the below works unchanged |
+| Reader UI (`frontend/`) | **GitHub Pages** | Static files. Pages serves those for free. |
+| API (`backend/`) | **Hugging Face Space** | Needs Python *and* holds the Gemini key, which must never reach a browser. |
 
-**Picking a container host.** Cloud Run is the default recommendation *because of
-this project's history*: the $50 Google Cloud credits granted alongside the AI Pro
-subscription cannot fund the Gemini API's prepay wallet, but they do pay for Cloud Run,
-which bills through ordinary Cloud Billing. It also scales to zero and cold-starts in
-seconds.
+The UI calls the API across the internet, so each has to be told about the other: the UI
+is built with the API's address baked in (`VITE_API_BASE`), and the API is told which
+origin may call it (`ALLOWED_ORIGINS`). Getting one of those wrong is the most common
+failure, and both are covered below.
 
-| Host | Cost | Cold start | Notes |
-|---|---|---|---|
-| **Google Cloud Run** | free tier + the $50 credits | ~2-5s | Docker-native; needs `gcloud` |
-| Hugging Face Spaces | free on CPU basic | wakes from sleep | Needs the README frontmatter already in this repo |
-| Fly.io | small free allowance | ~1-3s | Docker-native |
-| Render | free tier | **~50s** | Sleeps after 15 min — a poor first impression |
+**Time:** about 40 minutes, most of it waiting for the first build.
 
 ---
 
-## The constraint everything else follows from
+## The thing that makes this demo reliable
 
-One Gemini key serves every visitor, and the free tier allows **20 requests a day** —
-not per visitor, but in total, for the whole project. (There is also a 5-per-minute
-limit, but the daily one binds first.)
+Every sample paper is **already ranked**, and those rankings are committed to the repo
+(`data/cache/parsed/`, `data/cache/reading_paths/`, ~4 MB). They are copied into the
+image, so opening a sample paper makes **no LLM call at all** — any number of visitors
+can browse all ten papers simultaneously without touching the API key or the quota.
 
-A public demo therefore cannot rank papers on demand for an audience. Twenty uploads
-empties the day for everyone, and a queue behind the per-minute limit is already
-indistinguishable from the app being broken (see `build-log.md`, 1.9).
+Only an **upload** reaches the model. Two settings cap that:
 
-So the demo path makes **no LLM calls at all**:
+- `RANK_BUDGET_PER_DAY` — what the whole deployment will spend in a day
+- `RANK_LIMIT_PER_VISITOR` — one person's share of it
 
-- `data/cache/parsed/` and `data/cache/reading_paths/` are **committed** (~4 MB) and
-  copied into the image. Every sample paper, every goal, already ranked.
-- Only an upload reaches the model. `RANK_BUDGET_PER_DAY` caps what the deployment spends
-  in total and `RANK_LIMIT_PER_VISITOR` caps one person's share; `/health` reports what is
-  left. A cache hit never costs budget, so browsing is never limited.
+`/health` reports what is left. A cache hit never costs budget, so browsing is never
+limited.
 
-Regenerate the committed caches after any prompt change (which bumps `RANKER_VERSION`
-and invalidates them):
+If you change the ranking prompt, `RANKER_VERSION` changes with it and every cached path
+is invalidated. Rebuild them before deploying again:
 
 ```bash
-# 30 rankings against a 20-a-day quota: two sittings.
-cd backend && python scripts/qa_reading_paths.py --max-calls 15
-# ...then again tomorrow. Cached work is never redone.
+cd backend && python scripts/qa_reading_paths.py
 git add data/cache/parsed data/cache/reading_paths
 ```
 
 ---
 
-## Backend → Hugging Face Spaces
+# Part 1 · Backend to Hugging Face
 
-A Space is a git repo that HF builds. There is no "connect my GitHub repo" button
-for Docker Spaces — you push to the Space's own remote, so this repo ends up with
-two remotes (`origin` on GitHub, `hf` on Hugging Face).
+A Space is a **git repository that Hugging Face builds and runs**. There is no "connect
+my GitHub repo" button for Docker Spaces — you push to the Space's own git remote. Your
+project ends up with two remotes: `origin` (GitHub) and `hf` (Hugging Face).
 
-The root `README.md` carries YAML frontmatter (`sdk: docker`, `app_port: 7860`)
-because that is how a Space learns what it is. GitHub renders it as a small table;
-that is the cost of deploying from one repo.
+## 1.1 Create the Space
 
-1. Create a Space: **Docker → Blank**, public, CPU basic (free).
-2. Create a **write** access token at huggingface.co/settings/tokens.
-3. Add the remote and push:
+1. Sign in at **huggingface.co**
+2. Avatar (top right) → **New Space**
+3. Fill in:
+   - **Owner** — your username
+   - **Space name** — `aura-citation-navigator`
+   - **License** — MIT
+   - **Select the Space SDK** — **Docker**, then the **Blank** template
+   - **Space hardware** — **CPU basic · 2 vCPU · 16 GB · FREE**
+   - **Visibility** — Public
+4. **Create Space**
 
-   ```bash
-   git remote add hf https://huggingface.co/spaces/<user>/<space>
-   git push hf main          # username = HF username, password = the token
-   ```
+> **If something looks paid:** the SDK choice itself is free. What costs money is
+> *upgraded hardware* (sometimes preselected — set it back to **CPU basic · FREE**) and
+> **Dev Mode** (a toggle in Space settings — leave it off). If Docker genuinely is not
+> available to you, see "Other hosts" at the end; the Dockerfile reads `$PORT` and runs
+> anywhere.
 
-4. Space **Settings → Variables and secrets**:
+You now have an empty Space at
+`huggingface.co/spaces/<your-username>/aura-citation-navigator`.
 
-   | Name | Kind | Value |
-   |---|---|---|
-   | `GEMINI_API_KEY` | Secret | your key |
-   | `ALLOWED_ORIGINS` | Variable | `https://<user>.github.io` |
-   | `RANK_BUDGET_PER_DAY` | Variable | `15` |
-   | `RANK_LIMIT_PER_VISITOR` | Variable | `3` |
+## 1.2 Create a write token
 
-4. Wait for the build, then check `https://<space>.hf.space/health` returns
-   `{"status":"ok"}` and `/api/reader/samples` lists ten papers.
+The Space's git remote needs a token, not your account password.
 
-Notes:
+1. **huggingface.co/settings/tokens**
+2. **Create new token** → Token type **Write** → name it `aura-deploy`
+3. **Copy it now.** It is shown once.
 
-- The image installs `requirements-prod.txt`, not `requirements.txt`.
-  `sentence-transformers` pulls torch (~2 GB) and nothing in `app/` imports it yet —
-  it is a Phase 2 dependency. Move it across when the localizer needs it.
-- Sample PDFs are gitignored, so the build fetches them from arXiv with
-  `scripts/fetch_sample_papers.py`. A fetch failure fails the build rather than
-  shipping an app with an empty sample list.
-- Spaces sleeps after inactivity. First request after a sleep is slow; the
-  committed caches mean it is slow *once*, not per paper.
-
-## Frontend → GitHub Pages
-
-1. Repo **Settings → Pages → Source: GitHub Actions**.
-2. Repo **Settings → Secrets and variables → Actions → Variables**, add
-   `VITE_API_BASE` = `https://<space>.hf.space`. A variable, not a secret: it is
-   baked into the bundle either way and is not sensitive.
-3. Push to `main`. `.github/workflows/deploy-frontend.yml` runs the tests, builds
-   with `BASE_PATH=/<repo>/`, and publishes.
-
-`BASE_PATH` matters: a *project* Pages site is served from `/<repo>/`, so a bundle
-built against `/` 404s on every asset.
-
-## Checking it
+## 1.3 Push the code
 
 ```bash
-curl https://<space>.hf.space/health          # {"status":"ok","rankings_left_today":15}
-curl https://<space>.hf.space/api/reader/samples
+cd ~/Documents/OPT_AURA/Agentic-AI-Citation-Navigator
+git remote add hf https://huggingface.co/spaces/<your-username>/aura-citation-navigator
+git push hf main
 ```
 
-Then open the Pages URL, pick a sample, confirm a goal, and confirm highlights appear
-**immediately** — if a sample takes seconds, its cached path did not make it into the
-image.
+When prompted:
+- **Username:** your Hugging Face username
+- **Password:** the token from 1.2 — *not* your account password
+
+If it refuses because the Space already has its own first commit:
+
+```bash
+git push hf main --force
+```
+
+Safe here: the only thing overwritten is Hugging Face's placeholder README.
+
+The build starts automatically. It will fail without the key — that is next.
+
+## 1.4 Set the key and the settings
+
+Space page → **Settings** → **Variables and secrets**.
+
+| Click | Name | Value |
+|---|---|---|
+| **New secret** | `GEMINI_API_KEY` | your key (the one in `.env`) |
+| **New variable** | `ALLOWED_ORIGINS` | `https://<your-github-username>.github.io` |
+| **New variable** | `RANK_BUDGET_PER_DAY` | `15` |
+| **New variable** | `RANK_LIMIT_PER_VISITOR` | `3` |
+
+Two things that matter:
+
+- `GEMINI_API_KEY` **must be a Secret, not a Variable.** Variables are visible to anyone
+  who can see the Space.
+- `ALLOWED_ORIGINS` is an **origin** — scheme and host only. No path, no trailing slash.
+  `https://you.github.io`, never `https://you.github.io/repo/`.
+
+Adding a secret restarts the Space.
+
+## 1.5 Watch the build
+
+Space page → **Logs**. The first build takes **5–10 minutes**: installing dependencies,
+then downloading the ten sample PDFs from arXiv.
+
+You are waiting for:
+
+```
+Uvicorn running on http://0.0.0.0:7860
+```
+
+## 1.6 Check it
+
+The Space URL uses **dashes**, not slashes:
+`https://<username>-aura-citation-navigator.hf.space`
+
+```bash
+curl https://<username>-aura-citation-navigator.hf.space/health
+# {"status":"ok","rankings_left_today":15}
+
+curl https://<username>-aura-citation-navigator.hf.space/api/reader/samples
+# ten .pdf filenames
+
+curl https://<username>-aura-citation-navigator.hf.space/api/reader/coverage
+# each paper with ready: ["skim","in-depth","critique"]
+```
+
+That third one is the important check: every paper must list **all three goals**. If any
+are empty, the cached paths did not reach the image and the demo will rank live.
+
+**Write the Space URL down.** Part 2 needs it.
 
 ---
 
-## Known limits of a public deployment
+# Part 2 · Frontend to GitHub Pages
+
+## 2.1 Tell the UI where the API is
+
+1. GitHub repo → **Settings** → **Secrets and variables** → **Actions**
+2. The **Variables** tab (not Secrets) → **New repository variable**
+   - **Name:** `VITE_API_BASE`
+   - **Value:** `https://<username>-aura-citation-navigator.hf.space` — no trailing slash
+
+A *variable*, not a secret: it is compiled into the public JavaScript either way, and it
+is not sensitive.
+
+## 2.2 Turn Pages on
+
+**Settings** → **Pages** → **Source:** **GitHub Actions**
+
+Not "Deploy from a branch" — `.github/workflows/deploy-frontend.yml` handles it.
+
+## 2.3 Deploy
+
+```bash
+git commit --allow-empty -m "Trigger first Pages deploy"
+git push origin main
+```
+
+Watch the **Actions** tab. The workflow runs the frontend tests, builds with the right
+base path, and publishes. About three minutes.
+
+Your site: `https://<your-github-username>.github.io/Agentic-AI-Citation-Navigator/`
+
+---
+
+# Part 3 · Check it works
+
+Open the Pages URL:
+
+1. **Ten papers listed**, each marked **ready** — the two halves are talking
+2. Open **Attention Is All You Need**, confirm **Skim**
+3. **Highlights appear immediately** ← the one to watch. More than a second or two means
+   it is ranking live, so a cached path is missing from the image.
+4. Switch to **Critique** — instantly different highlighting
+5. Upload a PDF — works, takes a few seconds, counts against the budget
+
+---
+
+## When it doesn't work
+
+| What you see | Cause | Fix |
+|---|---|---|
+| Page loads, no papers, CORS error in console | `ALLOWED_ORIGINS` wrong | Origin only: `https://you.github.io`. No path, no trailing slash. Then restart the Space. |
+| Blank page, 404s on `.js` files | Pages source wrong | Settings → Pages → Source = **GitHub Actions** |
+| "The backend isn't running" banner | Space asleep, or `VITE_API_BASE` wrong | Open the Space URL to wake it. Check for a trailing slash. |
+| Build fails on `fetch_sample_papers.py` | arXiv throttled the build | Space Settings → **Factory rebuild** |
+| 503 "today's ranking budget is spent" | Expected once uploads use it up | Samples still work. Resets daily, or raise `RANK_BUDGET_PER_DAY`. |
+| Samples slow instead of instant | Cached paths missing | `git ls-files data/cache/reading_paths \| wc -l` — must be 30 |
+
+## Updating later
+
+```bash
+git push origin main   # frontend — the Pages workflow runs
+git push hf main       # backend  — the Space rebuilds
+```
+
+Both, if the change touches both.
+
+## Known limits
 
 - **Uploads do not persist.** Spaces' filesystem is ephemeral, so an uploaded paper and
   its ranking vanish on restart. The committed samples always survive.
-- **The rate limit is per process and in-memory.** It resets on restart and is keyed on
-  `X-Forwarded-For`, which a determined visitor can spoof. It guards a quota, not access.
-- **Twenty rankings a day, total.** That is the whole budget, shared by everyone. The
-  pre-ranked samples are unaffected, but uploads will stop working once the day is spent
-  and resume at the quota reset. If the demo gets real use, enable billing — pay-as-you-go
-  Flash is fractions of a cent per ranking and makes this disappear.
-- **Phase 2/3 evaluation will not fit.** The CL-SciSumm harness is far larger than the
-  thirty calls that already strain this budget, and it draws on the same key as the live
-  app. Plan a separate key before that work starts.
+- **The rate limit is in-memory.** It resets when the Space restarts and is keyed on
+  `X-Forwarded-For`, which can be spoofed. It guards a quota, not access.
+- **The Space sleeps** after inactivity. The first visit after that is slow once, not per
+  paper.
+- **Phase 2/3 evaluation will not fit** alongside the live app on one key. The CL-SciSumm
+  harness is thousands of calls. Plan a separate key before that work.
+
+## Other hosts
+
+The Dockerfile reads `$PORT`, so it runs unchanged on any container host.
+
+| Host | Cost | Cold start | Notes |
+|---|---|---|---|
+| **Google Cloud Run** | free tier + Cloud credits | ~2–5s | Cloud credits that cannot fund the Gemini prepay wallet *do* pay for this. Needs `gcloud`. |
+| Hugging Face Spaces | free on CPU basic | wakes from sleep | The README frontmatter in this repo configures it. |
+| Fly.io | small free allowance | ~1–3s | Needs `flyctl`. |
+| Render | free | **~50s** | Sleeps after 15 minutes — a poor first impression on a shared link. |
