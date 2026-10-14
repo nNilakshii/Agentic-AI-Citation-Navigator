@@ -31,6 +31,11 @@ ENV PYTHONPATH=/home/app/backend \
 # sample list is empty.
 RUN python backend/scripts/fetch_sample_papers.py
 
+# The committed parses answer for each sample without re-parsing, but the
+# reader also fetches the PDF bytes, which live in the store, not the repo.
+# Seed them here so every instance can serve every sample from the start.
+RUN python backend/scripts/seed_pdf_store.py
+
 # Every host names the port differently: Spaces expects 7860, Cloud Run and
 # Fly inject PORT, Render sets PORT too. Defaulting to 7860 keeps Spaces
 # working with no configuration while letting the others override it.

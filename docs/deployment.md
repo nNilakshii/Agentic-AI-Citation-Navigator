@@ -90,6 +90,19 @@ needs nothing installed, and it redeploys automatically whenever you push to Git
 
 Cloud Run injects `PORT`; the Dockerfile reads it, so there is nothing to configure.
 
+### Run exactly one instance
+
+Set **Maximum number of instances** to **1** (Console: *Revision scaling*; CLI:
+`--max-instances 1`). Two things depend on it:
+
+- **The daily budget is counted in memory.** Each instance keeps its own count, so with
+  the default of up to 20 instances, `RANK_BUDGET_PER_DAY=15` could become 300.
+- **Uploaded PDFs live on one instance's disk.** A later request for that PDF may reach
+  a different instance and 404. (Sample PDFs are seeded into the image at build, so
+  they work on any instance.)
+
+One instance handles 80 concurrent requests, far more than a demo needs.
+
 ## 1B · CLI route (if you would rather use a terminal)
 
 Install the SDK once from `cloud.google.com/sdk/docs/install`, then:
