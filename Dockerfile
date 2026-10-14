@@ -31,6 +31,9 @@ ENV PYTHONPATH=/home/app/backend \
 # sample list is empty.
 RUN python backend/scripts/fetch_sample_papers.py
 
-# Spaces routes to 7860.
+# Every host names the port differently: Spaces expects 7860, Cloud Run and
+# Fly inject PORT, Render sets PORT too. Defaulting to 7860 keeps Spaces
+# working with no configuration while letting the others override it.
+ENV PORT=7860
 EXPOSE 7860
-CMD ["uvicorn", "app.main:app", "--app-dir", "backend", "--host", "0.0.0.0", "--port", "7860"]
+CMD ["sh", "-c", "uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port ${PORT:-7860}"]
