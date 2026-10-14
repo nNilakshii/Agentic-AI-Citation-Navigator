@@ -116,3 +116,18 @@ def test_empty_upload_is_rejected(client):
 def test_sample_traversal_is_refused(client):
     response = client.post("/api/reader/papers/samples/..%2F..%2Fetc%2Fpasswd")
     assert response.status_code == 404
+
+
+def test_a_cached_parse_still_serves_its_pdf(client, synthetic_pdf, tmp_path):
+    # Regression: the deployed image ships parses but not PDF bytes, so the
+    # parse came back as a cache hit before the PDF was ever stored, and
+    # GET /pdf returned 404. The reader then rendered no pages at all.
+    paper_id = upload(client, synthetic_pdf).json()["paper_id"]
+    (tmp_path / "pdfs" / f"{paper_id}.pdf").unlink()  # a fresh container
+
+    again = upload(client, synthetic_pdf)  # served from the parse cache
+
+    assert again.status_code == 200
+    pdf = client.get(f"/api/reader/papers/{paper_id}/pdf")
+    assert pdf.status_code == 200
+    assert pdf.content == synthetic_pdf
