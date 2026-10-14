@@ -9,7 +9,7 @@ Two halves, two hosts, because they need different things:
 | Half | Goes to | Why |
 |---|---|---|
 | Reader UI (`frontend/`) | **GitHub Pages** | Static files. Pages serves those for free. |
-| API (`backend/`) | **Hugging Face Space** | Needs Python *and* holds the Gemini key, which must never reach a browser. |
+| API (`backend/`) | **Google Cloud Run** | Needs Python *and* holds the Gemini key, which must never reach a browser. |
 
 The UI calls the API across the internet, so each has to be told about the other: the UI
 is built with the API's address baked in (`VITE_API_BASE`), and the API is told which
@@ -45,115 +45,89 @@ git add data/cache/parsed data/cache/reading_paths
 
 ---
 
-# Part 1 · Backend to Hugging Face
+# Part 1 · Backend to Google Cloud Run
 
-A Space is a **git repository that Hugging Face builds and runs**. There is no "connect
-my GitHub repo" button for Docker Spaces — you push to the Space's own git remote. Your
-project ends up with two remotes: `origin` (GitHub) and `hf` (Hugging Face).
+> **Why not Hugging Face** (checked 2026-10-14): the new-Space page marks both Gradio and
+> Docker as **Paid** — "Static Spaces stay free for everyone. To create a Space that runs
+> on compute, subscribe to PRO." A Static Space serves files only, so it cannot run
+> FastAPI. The Space frontmatter stays in README.md in case a PRO account appears later.
 
-## 1.1 Create the Space
+Cloud Run runs the same Dockerfile, scales to zero when nobody is using it, and bills
+through ordinary Cloud Billing — which means the Google Cloud credits that could not
+fund the Gemini prepay wallet **do** pay for it.
 
-1. Sign in at **huggingface.co**
-2. Avatar (top right) → **New Space**
-3. Fill in:
-   - **Owner** — your username
-   - **Space name** — `aura-citation-navigator`
-   - **License** — MIT
-   - **Select the Space SDK** — **Docker**, then the **Blank** template
-   - **Space hardware** — **CPU basic · 2 vCPU · 16 GB · FREE**
-   - **Visibility** — Public
-4. **Create Space**
+There are two ways in. **Use the Console route** unless you already have `gcloud`: it
+needs nothing installed, and it redeploys automatically whenever you push to GitHub.
 
-> **If something looks paid:** the SDK choice itself is free. What costs money is
-> *upgraded hardware* (sometimes preselected — set it back to **CPU basic · FREE**) and
-> **Dev Mode** (a toggle in Space settings — leave it off). If Docker genuinely is not
-> available to you, see "Other hosts" at the end; the Dockerfile reads `$PORT` and runs
-> anywhere.
+## 1A · Console route (no install, auto-deploys on push)
 
-You now have an empty Space at
-`huggingface.co/spaces/<your-username>/aura-citation-navigator`.
+1. **console.cloud.google.com** → make sure the project selector at the top says
+   **gen-lang-client-0514561442** (the project your API key belongs to)
+2. Search for **Cloud Run** → **Deploy container** → **Service**
+3. Choose **Continuously deploy from a repository** → **Set up with Cloud Build**
+   - **Repository provider:** GitHub → authenticate → pick
+     `nNilakshii/Agentic-AI-Citation-Navigator`
+   - **Branch:** `^main$`
+   - **Build type:** **Dockerfile**, path `/Dockerfile`
+4. Back on the service form:
+   - **Service name:** `aura-api`
+   - **Region:** `us-central1`
+   - **Authentication:** **Allow unauthenticated invocations** ← required, or the browser
+     cannot reach it
+5. Expand **Container(s), Volumes, Networking, Security** → **Variables & Secrets**:
 
-## 1.2 Create a write token
+   | Kind | Name | Value |
+   |---|---|---|
+   | Secret (or variable) | `GEMINI_API_KEY` | your key |
+   | Variable | `ALLOWED_ORIGINS` | `https://<your-github-username>.github.io` |
+   | Variable | `RANK_BUDGET_PER_DAY` | `15` |
+   | Variable | `RANK_LIMIT_PER_VISITOR` | `3` |
 
-The Space's git remote needs a token, not your account password.
+   Prefer **Secret Manager** for the key if offered; a plain env var is acceptable on a
+   private project but is visible to anyone with Console access.
+6. **Create.** The first build takes 5–10 minutes — installing dependencies, then
+   fetching the ten sample PDFs from arXiv.
 
-1. **huggingface.co/settings/tokens**
-2. **Create new token** → Token type **Write** → name it `aura-deploy`
-3. **Copy it now.** It is shown once.
+Cloud Run injects `PORT`; the Dockerfile reads it, so there is nothing to configure.
 
-## 1.3 Push the code
+## 1B · CLI route (if you would rather use a terminal)
 
-```bash
-cd ~/Documents/OPT_AURA/Agentic-AI-Citation-Navigator
-git remote add hf https://huggingface.co/spaces/<your-username>/aura-citation-navigator
-git push hf main
-```
-
-When prompted:
-- **Username:** your Hugging Face username
-- **Password:** the token from 1.2 — *not* your account password
-
-If it refuses because the Space already has its own first commit:
-
-```bash
-git push hf main --force
-```
-
-Safe here: the only thing overwritten is Hugging Face's placeholder README.
-
-The build starts automatically. It will fail without the key — that is next.
-
-## 1.4 Set the key and the settings
-
-Space page → **Settings** → **Variables and secrets**.
-
-| Click | Name | Value |
-|---|---|---|
-| **New secret** | `GEMINI_API_KEY` | your key (the one in `.env`) |
-| **New variable** | `ALLOWED_ORIGINS` | `https://<your-github-username>.github.io` |
-| **New variable** | `RANK_BUDGET_PER_DAY` | `15` |
-| **New variable** | `RANK_LIMIT_PER_VISITOR` | `3` |
-
-Two things that matter:
-
-- `GEMINI_API_KEY` **must be a Secret, not a Variable.** Variables are visible to anyone
-  who can see the Space.
-- `ALLOWED_ORIGINS` is an **origin** — scheme and host only. No path, no trailing slash.
-  `https://you.github.io`, never `https://you.github.io/repo/`.
-
-Adding a secret restarts the Space.
-
-## 1.5 Watch the build
-
-Space page → **Logs**. The first build takes **5–10 minutes**: installing dependencies,
-then downloading the ten sample PDFs from arXiv.
-
-You are waiting for:
-
-```
-Uvicorn running on http://0.0.0.0:7860
-```
-
-## 1.6 Check it
-
-The Space URL uses **dashes**, not slashes:
-`https://<username>-aura-citation-navigator.hf.space`
+Install the SDK once from `cloud.google.com/sdk/docs/install`, then:
 
 ```bash
-curl https://<username>-aura-citation-navigator.hf.space/health
+gcloud auth login
+gcloud config set project gen-lang-client-0514561442
+gcloud run deploy aura-api \
+  --source . --region us-central1 --allow-unauthenticated \
+  --set-env-vars ALLOWED_ORIGINS=https://<your-github-username>.github.io,RANK_BUDGET_PER_DAY=15,RANK_LIMIT_PER_VISITOR=3 \
+  --set-env-vars GEMINI_API_KEY=<your-key>
+```
+
+## 1.C Check it
+
+Cloud Run gives you a URL like `https://aura-api-<hash>-uc.a.run.app`.
+
+```bash
+curl https://<your-service-url>/health
 # {"status":"ok","rankings_left_today":15}
 
-curl https://<username>-aura-citation-navigator.hf.space/api/reader/samples
+curl https://<your-service-url>/api/reader/samples
 # ten .pdf filenames
 
-curl https://<username>-aura-citation-navigator.hf.space/api/reader/coverage
+curl https://<your-service-url>/api/reader/coverage
 # each paper with ready: ["skim","in-depth","critique"]
 ```
 
 That third one is the important check: every paper must list **all three goals**. If any
 are empty, the cached paths did not reach the image and the demo will rank live.
 
-**Write the Space URL down.** Part 2 needs it.
+**Write the service URL down.** Part 2 needs it.
+
+## Cost
+
+Cloud Run's always-free tier covers roughly 2M requests a month, and the service scales
+to zero between visits. For a demo this is effectively free even before the credits. Set
+a **budget alert** in Cloud Billing anyway.
 
 ---
 
@@ -206,30 +180,32 @@ Open the Pages URL:
 
 | What you see | Cause | Fix |
 |---|---|---|
-| Page loads, no papers, CORS error in console | `ALLOWED_ORIGINS` wrong | Origin only: `https://you.github.io`. No path, no trailing slash. Then restart the Space. |
+| Page loads, no papers, CORS error in console | `ALLOWED_ORIGINS` wrong | Origin only: `https://you.github.io`. No path, no trailing slash. Then redeploy. |
 | Blank page, 404s on `.js` files | Pages source wrong | Settings → Pages → Source = **GitHub Actions** |
-| "The backend isn't running" banner | Space asleep, or `VITE_API_BASE` wrong | Open the Space URL to wake it. Check for a trailing slash. |
-| Build fails on `fetch_sample_papers.py` | arXiv throttled the build | Space Settings → **Factory rebuild** |
+| "The backend isn't running" banner | Cold start, or `VITE_API_BASE` wrong | Open the service URL directly to wake it. Check for a trailing slash. |
+| Build fails on `fetch_sample_papers.py` | arXiv throttled the build | Re-run the build in Cloud Build |
 | 503 "today's ranking budget is spent" | Expected once uploads use it up | Samples still work. Resets daily, or raise `RANK_BUDGET_PER_DAY`. |
+| 403 from the service URL | Unauthenticated invocations not allowed | Cloud Run → service → Security → allow unauthenticated |
 | Samples slow instead of instant | Cached paths missing | `git ls-files data/cache/reading_paths \| wc -l` — must be 30 |
 
 ## Updating later
 
 ```bash
-git push origin main   # frontend — the Pages workflow runs
-git push hf main       # backend  — the Space rebuilds
+git push origin main
 ```
 
-Both, if the change touches both.
+That is all: the Pages workflow rebuilds the frontend, and Cloud Build rebuilds and
+redeploys the backend from the same push.
 
 ## Known limits
 
-- **Uploads do not persist.** Spaces' filesystem is ephemeral, so an uploaded paper and
-  its ranking vanish on restart. The committed samples always survive.
+- **Uploads do not persist.** Cloud Run containers are ephemeral and scale to zero, so an
+  uploaded paper and its ranking vanish when the instance stops. The committed samples
+  always survive.
 - **The rate limit is in-memory.** It resets when the Space restarts and is keyed on
   `X-Forwarded-For`, which can be spoofed. It guards a quota, not access.
-- **The Space sleeps** after inactivity. The first visit after that is slow once, not per
-  paper.
+- **Cloud Run scales to zero.** The first request after an idle period pays a few seconds
+  of cold start, once, not per paper.
 - **Phase 2/3 evaluation will not fit** alongside the live app on one key. The CL-SciSumm
   harness is thousands of calls. Plan a separate key before that work.
 
@@ -240,6 +216,6 @@ The Dockerfile reads `$PORT`, so it runs unchanged on any container host.
 | Host | Cost | Cold start | Notes |
 |---|---|---|---|
 | **Google Cloud Run** | free tier + Cloud credits | ~2–5s | Cloud credits that cannot fund the Gemini prepay wallet *do* pay for this. Needs `gcloud`. |
-| Hugging Face Spaces | free on CPU basic | wakes from sleep | The README frontmatter in this repo configures it. |
+| Hugging Face Spaces | **PRO only** | n/a | Free accounts get Static Spaces, which cannot run Python. |
 | Fly.io | small free allowance | ~1–3s | Needs `flyctl`. |
 | Render | free | **~50s** | Sleeps after 15 minutes — a poor first impression on a shared link. |
