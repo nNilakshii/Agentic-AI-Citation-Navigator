@@ -203,12 +203,26 @@ Open the Pages URL:
 
 ## Updating later
 
+**Frontend:** push to `main`. The Pages workflow runs whenever `frontend/` changes.
+
+**Backend:** depends on how it was deployed. This project used the CLI route, which sets
+up no build trigger, so a push does **not** redeploy the API. Redeploy explicitly:
+
 ```bash
-git push origin main
+gcloud run deploy aura-api --source . --region us-central1 --max-instances 1
 ```
 
-That is all: the Pages workflow rebuilds the frontend, and Cloud Build rebuilds and
-redeploys the backend from the same push.
+Settings, the secret and the instance limit carry over from the previous revision. (The
+Console route in 1A wires a Cloud Build trigger instead, after which a push is enough.)
+
+**Live now** (deployed 2026-10-14):
+
+| | |
+|---|---|
+| Site | https://nnilakshii.github.io/Agentic-AI-Citation-Navigator/ |
+| API | https://aura-api-313292096754.us-central1.run.app |
+| Project | `gen-lang-client-0514561442`, region `us-central1`, service `aura-api` |
+| Key | Secret Manager, `gemini-api-key` |
 
 ## Known limits
 
