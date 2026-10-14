@@ -6,7 +6,20 @@ holds the Gemini key, so it needs a real server and the key never reaches the br
 | Half | Where | Why |
 |---|---|---|
 | Reader UI | GitHub Pages | Already have a Pages site; a static bundle is all it needs |
-| API | Hugging Face Spaces (Docker) | Free, no card, built-in secrets, and where an ML demo is expected |
+| API | a container host | The Dockerfile reads `$PORT`, so any of the below works unchanged |
+
+**Picking a container host.** Cloud Run is the default recommendation *because of
+this project's history*: the $50 Google Cloud credits granted alongside the AI Pro
+subscription cannot fund the Gemini API's prepay wallet, but they do pay for Cloud Run,
+which bills through ordinary Cloud Billing. It also scales to zero and cold-starts in
+seconds.
+
+| Host | Cost | Cold start | Notes |
+|---|---|---|---|
+| **Google Cloud Run** | free tier + the $50 credits | ~2-5s | Docker-native; needs `gcloud` |
+| Hugging Face Spaces | free on CPU basic | wakes from sleep | Needs the README frontmatter already in this repo |
+| Fly.io | small free allowance | ~1-3s | Docker-native |
+| Render | free tier | **~50s** | Sleeps after 15 min — a poor first impression |
 
 ---
 
