@@ -314,6 +314,50 @@ day's quota.
 
 ---
 
+## Task 2.1 — citation detection
+
+### A perfect score that meant nothing
+
+The first run reported 100% of citations linked for CL-SciSumm and Semantic Reader. Both
+had found exactly **one** reference. PyMuPDF had merged runs of entries into single blocks
+("...To appear. [2] Charles Bazerman..."), so a rule looking for labels at line starts saw
+only the first. The link rate could not show this: one citation, one entry, 100%.
+
+What did show it was a second, independent measure: every reference in an academic list
+is cited at least once, so **reference coverage** reveals missed citations and broken
+entries that link rate hides. That check found every remaining real bug below.
+
+### A line ending in an initial looked like the end of an entry
+
+"Yonghui Wu, ..., Quoc V." wrapped onto "Le, Mohammad Norouzi". Author-year entries have
+no labels, so entry ends are inferred from a closing period — and "V." is one. The entry
+split in two: Wu was folded into the previous reference, the rest credited to "Le". Same
+for "Daniel A.", "Bryan R.", "Samuel R.", "Kilian Q.".
+
+### Two papers, same first author, same year
+
+BERT cites both "Clark and Gardner, 2018" and "Clark et al., 2018"; matching on surname and
+year sent both to the first entry, and the other looked uncited. Ties are now broken by
+the rest of the author list ("and Gardner" needs Gardner as co-author; "et al." needs three
+or more authors).
+
+### Smaller ones, each from a real sample
+
+- A model name before the authors: "(GloVe, Pennington et al., 2014)"
+- A note after the year: "(Joshi et al., 2017, Wikipedia setting)"
+- A date read as an author: "(May 2020)"; venues like "(JCDL 2016)" excluded by style
+- Accents extracted as standalone characters: "ˇReh˚uˇrek" did not start with a capital
+- "References" matched inside "Coreference Resolution"
+
+**Result:** 915/923 citations linked, 510/513 references cited, 0 inconsistent links.
+Every remaining miss was checked by hand and is absent from the source: SciCite quotes
+example citation sentences from its dataset, CL-SciSumm's entry 15 is missing from the
+extracted text, and two Longformer references appear only in figures.
+
+**Each fix is guarded:** reverting any one of them fails at least one test.
+
+---
+
 ## Patterns worth carrying forward
 
 1. **Unit tests caught the logic; only a live run caught the damage.** Every bug in B and C
@@ -336,6 +380,10 @@ day's quota.
    badge joining its button's name. The fix each time was to keep the name stable and put
    the new information somewhere else: a different role, a scoped query, `aria-hidden`
    plus `title`. Worth doing pre-emptively.
-8. **Read *which* limit an API names.** Four tasks were designed against a 5-per-minute
+8. **One metric is not enough to trust a detector.** A link rate of 100% hid a parser
+   that found one reference in fifty. A second measure that can disagree with the first
+   (coverage), plus a consistency check on each result, is what made the number mean
+   something.
+9. **Read *which* limit an API names.** Four tasks were designed against a 5-per-minute
    limit that was never the binding one. A rate limit and a daily quota are the same 429
    at the call site and want opposite responses.

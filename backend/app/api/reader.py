@@ -13,10 +13,12 @@ from fastapi.responses import Response
 
 from app.api.limits import check_rank_budget
 from app.cache import PaperStore
+from app.core.citations import build_citation_map
 from app.core.goals import GOAL_SPECS
 from app.core.pdf_parser import PARSER_VERSION, paper_id_for, parse_pdf
 from app.core.reading_path import RANKER_VERSION, build_reading_path
 from app.llm.client import LLMClient, LLMError, LLMNotConfigured, get_llm_client
+from app.models.citation import CitationMap
 from app.models.paper import ParsedPaper, PaperSummary, Section
 from app.models.reading import ReadingGoal, ReadingPath
 
@@ -131,6 +133,21 @@ def get_paper(paper_id: str, store: PaperStore = Depends(get_store)) -> ParsedPa
 def get_outline(paper_id: str, store: PaperStore = Depends(get_store)) -> list[Section]:
     """The outline alone — what the reader sidebar (1.4) needs, without the text."""
     return _load_or_404(paper_id, store).sections
+
+
+@router.get(
+    "/papers/{paper_id}/citations",
+    response_model=CitationMap,
+    summary="Every citation in a paper, linked to its reference entry (task 2.1)",
+)
+def get_citations(paper_id: str, store: PaperStore = Depends(get_store)) -> CitationMap:
+    """Detect the paper's citations and the references they point at.
+
+    Computed from the parse on each request rather than cached: it is pure
+    text processing, a few milliseconds per paper, and a separate artifact
+    from the parse so that changing it never invalidates cached rankings.
+    """
+    return build_citation_map(_load_or_404(paper_id, store))
 
 
 @router.get("/papers/{paper_id}/pdf", summary="Get the original PDF bytes")

@@ -40,6 +40,7 @@ returns the ones worth reading, each with a span, an importance and a one-line r
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/reader/goals` | The goals and what each one surfaces |
+| `GET` | `/api/reader/papers/{paper_id}/citations` | Every citation, linked to its reference entry (2.1) |
 | `GET` | `/api/reader/coverage` | Which papers already have a path, per goal — what opens instantly |
 | `POST` | `/api/reader/papers/{paper_id}/reading-path?goal=skim` | Rank (cached; `&force=true` to re-rank) |
 | `GET` | `/api/reader/papers/{paper_id}/reading-path?goal=skim` | The cached path — never spends LLM quota |
@@ -73,6 +74,15 @@ curl -X POST localhost:8000/api/reader/papers/samples/attention-is-all-you-need.
 ```bash
 pytest
 ```
+
+## Citation quality gate (Phase 2.1)
+
+```bash
+python scripts/qa_citations.py     # ~1s, no network
+```
+
+Fails if any paper links fewer than 85% of its citations, cites fewer than 90% of its
+references, or links a citation to an entry that disagrees with it.
 
 ## Quality gate across the sample papers (Phase 1.10)
 

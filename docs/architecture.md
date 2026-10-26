@@ -377,6 +377,27 @@ explicit selection wins on its own page. The general lesson for the phases ahead
 lagging, lower-resolution signal than an intentional navigation**, and must never overwrite
 one.
 
+## Decided: citations are a separate artifact, and GROBID can wait
+
+Settled at 2.1 (2026-10-26).
+
+**Separate from the parse.** Putting citations into `ParsedPaper` would bump
+`parser_version`, and every cached reading path is keyed on it — so the change would
+silently invalidate rankings that cost quota to build, including those the live demo
+serves. The citation map is derived from a parse on request instead (a few ms per paper)
+and carries its own `citation_version`.
+
+**No GROBID yet.** The plan was to revisit GROBID here, for structured reference parsing.
+Hand-rolled detection reached 99.1% of citations linked and 99.4% of references cited
+across the ten samples, with every remaining miss absent from the source text. GROBID
+would add a Java service and a Docker dependency for at most those last few. Revisit if
+cited-paper resolution in 2.2 turns up entries the parser has mangled.
+
+**How it is measured without labels.** Link rate alone was misleading: two papers scored
+100% while finding a single reference. Reference *coverage* — every reference should be
+cited at least once — is what exposed missed citations, and a per-link consistency check
+(number = label, or surname + year match) catches wrong links. `scripts/qa_citations.py`.
+
 ## Open decisions
 
 - **GROBID adoption** — revisit at 2.1, where structured reference parsing is the task.
