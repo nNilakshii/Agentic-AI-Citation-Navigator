@@ -41,6 +41,8 @@ returns the ones worth reading, each with a span, an importance and a one-line r
 |---|---|---|
 | `GET` | `/api/reader/goals` | The goals and what each one surfaces |
 | `GET` | `/api/reader/papers/{paper_id}/citations` | Every citation, linked to its reference entry (2.1) |
+| `POST` | `/api/reader/papers/{paper_id}/references/resolve` | Identify each cited paper via Semantic Scholar (2.2); `?title_search=true` is slow |
+| `GET` | `/api/reader/papers/{paper_id}/references/resolved` | The cached resolution; never calls Semantic Scholar |
 | `GET` | `/api/reader/coverage` | Which papers already have a path, per goal — what opens instantly |
 | `POST` | `/api/reader/papers/{paper_id}/reading-path?goal=skim` | Rank (cached; `&force=true` to re-rank) |
 | `GET` | `/api/reader/papers/{paper_id}/reading-path?goal=skim` | The cached path — never spends LLM quota |
@@ -74,6 +76,14 @@ curl -X POST localhost:8000/api/reader/papers/samples/attention-is-all-you-need.
 ```bash
 pytest
 ```
+
+## Reference resolution gate (Phase 2.2)
+
+```bash
+python scripts/qa_resolution.py    # cached: ~1s; cold: bounded by Semantic Scholar's rate limit
+```
+
+Lists every inexact title match for a human to check, and every unresolved entry.
 
 ## Citation quality gate (Phase 2.1)
 

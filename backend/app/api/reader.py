@@ -13,14 +13,17 @@ from fastapi.responses import Response
 
 from app.api.limits import check_rank_budget
 from app.cache import PaperStore
-from app.core.citations import build_citation_map
+from app.core.citations import CITATION_VERSION, build_citation_map
 from app.core.goals import GOAL_SPECS
 from app.core.pdf_parser import PARSER_VERSION, paper_id_for, parse_pdf
 from app.core.reading_path import RANKER_VERSION, build_reading_path
+from app.core.resolution import RESOLVER_VERSION, resolve_references
 from app.llm.client import LLMClient, LLMError, LLMNotConfigured, get_llm_client
 from app.models.citation import CitationMap
 from app.models.paper import ParsedPaper, PaperSummary, Section
 from app.models.reading import ReadingGoal, ReadingPath
+from app.models.resolution import ResolutionMap
+from app.scholar.client import SemanticScholar, get_scholar
 
 router = APIRouter()
 
@@ -148,6 +151,66 @@ def get_citations(paper_id: str, store: PaperStore = Depends(get_store)) -> Cita
     from the parse so that changing it never invalidates cached rankings.
     """
     return build_citation_map(_load_or_404(paper_id, store))
+
+
+@router.post(
+    "/papers/{paper_id}/references/resolve",
+    response_model=ResolutionMap,
+    summary="Identify the real paper behind each reference entry (task 2.2)",
+)
+def resolve(
+    paper_id: str,
+    title_search: bool = Query(
+        False,
+        description="Also search by title for entries the cheap methods miss. "
+        "One request per entry at Semantic Scholar's rate limit: minutes, not ms.",
+    ),
+    force: bool = Query(False, description="Re-resolve even if cached"),
+    store: PaperStore = Depends(get_store),
+    scholar: SemanticScholar = Depends(get_scholar),
+) -> ResolutionMap:
+    """Resolve the paper's references, using the cache when it can.
+
+    Sync on purpose: the Semantic Scholar client blocks on its rate limiter,
+    and FastAPI runs sync handlers in a thread pool, off the event loop.
+    """
+    paper = _load_or_404(paper_id, store)
+    key = (paper_id, PARSER_VERSION, CITATION_VERSION, RESOLVER_VERSION)
+    if not force:
+        cached = store.load_resolution(*key, title_search=title_search)
+        if cached is not None:
+            return cached
+
+    result = resolve_references(
+        paper, build_citation_map(paper), scholar, title_search=title_search
+    )
+    # An incomplete map looks like a complete one with more misses. Caching it
+    # would turn a passing rate limit into permanently unresolved references.
+    if result.complete:
+        store.save_resolution(result, title_search=title_search)
+    return result
+
+
+@router.get(
+    "/papers/{paper_id}/references/resolved",
+    response_model=ResolutionMap,
+    summary="The cached resolution, if one has been built",
+)
+def get_resolution(
+    paper_id: str,
+    title_search: bool = Query(False),
+    store: PaperStore = Depends(get_store),
+) -> ResolutionMap:
+    """Read-only counterpart to the POST: never calls Semantic Scholar."""
+    _load_or_404(paper_id, store)
+    key = (paper_id, PARSER_VERSION, CITATION_VERSION, RESOLVER_VERSION)
+    cached = store.load_resolution(*key, title_search=title_search)
+    if cached is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"no resolution for {paper_id}; POST .../references/resolve first",
+        )
+    return cached
 
 
 @router.get("/papers/{paper_id}/pdf", summary="Get the original PDF bytes")
