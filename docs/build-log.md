@@ -358,7 +358,43 @@ extracted text, and two Longformer references appear only in figures.
 
 ---
 
-## Patterns worth carrying forward
+## Task 2.2 — reference resolution
+
+### The rate limit is not what the documentation says
+
+Requests spaced 1.1s apart — inside the documented one per second — still drew 429s from
+Semantic Scholar, and retry waits of 1-4s exhausted every attempt. Semantic Reader's
+resolution failed outright at 26%. Waits had to reach 80 seconds. Because the failure
+marked the result incomplete rather than returning a quietly short list (the 1.6 lesson),
+it was visible, not silent. Per-entry title search turned out impractical at this rate and
+is opt-in.
+
+### A plausible match to the wrong paper
+
+BERT's "The fifth PASCAL recognizing textual entailment challenge" matched Semantic
+Scholar's "The Sixth PASCAL Recognizing Textual Entailment Challenge" at 0.86: every word
+but the one that matters. Found only by printing every inexact match and reading them.
+Series papers differ by an ordinal or a number, so a near-match missing one is rejected.
+
+### The same title, spelled two ways
+
+PDFs join words broken across lines ("Semisupervised"), use curly apostrophes ("Google’s")
+and sometimes keep a wrap's space ("Sentence- BERT"); Semantic Scholar does none of these.
+Deleting hyphens alone then broke "Sentence- BERT", which had matched before — a dash has
+to take its surrounding whitespace with it, on both sides.
+
+### Smaller ones
+
+- Some of Semantic Scholar's reference entries are title-only stubs with no paper id;
+  matching one identified nothing and blocked the fallbacks.
+- A test passed for the wrong reason twice: once its "near match" was accidentally
+  verbatim, once a fixture that disabled retry sleeps also disabled the rate limiter
+  under test. And one edit script silently changed nothing because a formatter had
+  rewritten the text it searched for; edit scripts now assert their target exists.
+
+**Result:** 495/513 references resolved (96.5%), 370/513 with a fetchable PDF (72.1%).
+
+
 
 1. **Unit tests caught the logic; only a live run caught the damage.** Every bug in B and C
    passed a green suite of 101 tests. Fakes cannot model a rate limit.

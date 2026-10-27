@@ -398,6 +398,30 @@ cited-paper resolution in 2.2 turns up entries the parser has mangled.
 cited at least once — is what exposed missed citations, and a per-link consistency check
 (number = label, or surname + year match) catches wrong links. `scripts/qa_citations.py`.
 
+## Decided: resolve references through the citing paper, not one by one
+
+Settled at 2.2 (2026-10-26).
+
+Semantic Scholar's `/paper/{id}/references` returns every work a paper cites in **one
+request** — titles, ids, open-access links, even the citing sentences and their intents.
+Matching our parsed entries to that list by title resolves 96.5% of the samples' 513
+references in ~10 requests. Searching per entry would have taken 513 requests, and in
+practice far longer than 513 seconds (below).
+
+**The rate limit is tighter than advertised.** The key is documented at one request per
+second, but requests spaced 1.1s apart still drew 429s, and recovery needed waits of up to
+80 seconds. Two consequences: per-entry title search is opt-in and capped, never part of
+an interactive request; and the CL-SciSumm harness in 2.6 must lean entirely on the cache.
+
+**Matching is by title** because a reference always contains the cited title, while author
+and venue formatting vary by style. Hyphens and apostrophes are deleted before comparing
+(PDFs join "Semi-\nsupervised"; Semantic Scholar keeps the hyphen), and a near-match that
+is missing an ordinal or number is rejected — series papers differ by exactly that word.
+
+**PDFs prefer arXiv.** Semantic Scholar lists an open-access PDF for far fewer papers than
+have an arXiv id, and every arXiv paper is free to read; 72% of references have a
+fetchable PDF this way. The rest are 2.3's abstract fallback.
+
 ## Open decisions
 
 - **GROBID adoption** — revisit at 2.1, where structured reference parsing is the task.

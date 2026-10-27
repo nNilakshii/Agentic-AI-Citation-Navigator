@@ -41,7 +41,7 @@ _Working order (dependency-driven): 1.1 → 1.2 → 1.3+1.4 → 1.5 → 1.6 → 
 
 ## Phase 2 · Citation Bridge (Cited-Span Localization)
 - [x] **2.1** Detect citation anchors → map to reference entries — Done 2026-10-26: `app/core/citations.py` + `GET /papers/{id}/citations`. Handles numeric (`[13]`, `[2, 19]`, `[1–3]`, labels `[n]` and `n.`) and author-year (parenthetical, narrative, multi-citation, `2018a,b`) — 4 and 6 of the samples. **915/923 citations linked (99.1%), 510/513 references cited (99.4%), 0 inconsistent links**; every remaining miss checked by hand and absent from the source. Built as a separate artifact from the parse so it never invalidates cached rankings. GROBID not needed yet. Gate: `scripts/qa_citations.py`. 170 backend tests (was 143)
-- [ ] **2.2** Reference resolution via Semantic Scholar / arXiv API
+- [x] **2.2** Reference resolution via Semantic Scholar / arXiv API — Done 2026-10-26: `app/scholar/client.py` (one process-wide rate limiter, disk cache, failures never cached) + `app/core/resolution.py` + `POST /papers/{id}/references/resolve`. Matches each entry to the citing paper's own Semantic Scholar reference list by title (1 request per paper), then printed arXiv ids/DOIs in one batch; per-entry title search is opt-in. **495/513 references resolved (96.5%), 370/513 with a fetchable PDF (72.1%)**; every inexact match checked by eye. Found a wrong match ("fifth" vs "sixth" PASCAL challenge) and fixed it. 192 backend tests (was 170)
 - [ ] **2.3** Fetch cited paper full text (open-access; abstract fallback)
 - [ ] **2.4** Segment cited paper into candidate passages
 - [ ] **2.5** Localizer v1 — embedding retrieval (Specter2 / MiniLM)
