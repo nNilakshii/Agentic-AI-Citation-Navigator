@@ -368,6 +368,10 @@ resolution failed outright at 26%. Waits had to reach 80 seconds. Because the fa
 marked the result incomplete rather than returning a quietly short list (the 1.6 lesson),
 it was visible, not silent. Per-entry title search turned out impractical at this rate and
 is opt-in.
+Measured: title search over the 18 unresolved entries took **68 requests and ~20 minutes
+to recover one reference** (96.5% → 96.7%). Half its guessed titles were the wrong part of
+the entry ("In: BIRNDL2019 (2019)"), and the rest are papers Semantic Scholar's title
+match does not find.
 
 ### A plausible match to the wrong paper
 
