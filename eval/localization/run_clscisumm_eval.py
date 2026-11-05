@@ -34,12 +34,7 @@ sys.path[:0] = [str(HERE), str(HERE.parents[1] / "backend")]
 
 import numpy as np  # noqa: E402
 
-from app.core.embedding import (  # noqa: E402
-    CACHE_DIR,
-    DEFAULT_MODEL,
-    SentenceTransformerEmbedder,
-    encode_cached,
-)
+from app.core.embedding import DEFAULT_MODEL  # noqa: E402
 from app.core.localizer import LOCALIZER_VERSION, select_top  # noqa: E402
 from app.core.passages import PASSAGE_VERSION, passages_from_paper  # noqa: E402
 from clscisumm import (
@@ -49,14 +44,27 @@ from clscisumm import (
     papers,
     split_of,
 )  # noqa: E402
+from rankers import (
+    bm25_scores,
+    embedding_scores,
+    hybrid_scores,
+    make_embedder,
+)  # noqa: E402
 from metrics import Counts, averaged_over_papers, hit_at_k, rouge_l  # noqa: E402
 
 KS = (1, 3, 5, 10)
 RESULTS = HERE / "results"
 
 
-def evaluate(split: str, ranker: str, model: str, seed: int = 0) -> dict:
-    embedder = SentenceTransformerEmbedder(model) if ranker == "embedding" else None
+def evaluate(
+    split: str,
+    ranker: str,
+    model: str,
+    seed: int = 0,
+    max_window: int = 3,
+    alpha: float = 0.5,
+) -> dict:
+    embedder = make_embedder(model) if ranker in ("embedding", "hybrid") else None
     rng = random.Random(seed)
     per_paper: dict[str, Counts] = {}
     pooled = Counts()
@@ -74,13 +82,24 @@ def evaluate(split: str, ranker: str, model: str, seed: int = 0) -> dict:
             continue
         reference = load_reference(paper)
         text_of = {s.id: s.text for s in reference.sentences}
-        passages = passages_from_paper(reference).passages
+        passages = [
+            p
+            for p in passages_from_paper(reference).passages
+            if len(p.sentence_ids) <= max_window
+        ]
         candidates = {i for p in passages for i in p.sentence_ids}
 
+        texts, queries = [p.text for p in passages], [c.query for c in citances]
         if ranker == "embedding":
-            vectors = encode_cached(embedder, [p.text for p in passages], CACHE_DIR)
-            queries = embedder.encode([c.query for c in citances])
-            all_scores = queries @ vectors.T
+            all_scores = embedding_scores(embedder, texts, queries)
+        elif ranker == "bm25":
+            all_scores = bm25_scores(texts, queries)
+        elif ranker == "hybrid":
+            all_scores = hybrid_scores(
+                bm25_scores(texts, queries),
+                embedding_scores(embedder, texts, queries),
+                alpha,
+            )
         else:
             all_scores = np.array([[rng.random() for _ in passages] for _ in citances])
 
@@ -124,7 +143,9 @@ def evaluate(split: str, ranker: str, model: str, seed: int = 0) -> dict:
     return {
         "split": split,
         "ranker": ranker,
-        "model": model if ranker == "embedding" else None,
+        "model": model if ranker in ("embedding", "hybrid") else None,
+        "max_window": max_window,
+        "alpha": alpha if ranker == "hybrid" else None,
         "passage_version": PASSAGE_VERSION,
         "localizer_version": LOCALIZER_VERSION,
         "papers": len(per_paper),
@@ -147,9 +168,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--split", choices=["all", "dev", "test"], default="all")
     parser.add_argument(
-        "--ranker", choices=["embedding", "random"], default="embedding"
+        "--ranker",
+        choices=["embedding", "bm25", "hybrid", "random"],
+        default="embedding",
     )
     parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--max-window", type=int, default=3, choices=[1, 2, 3])
+    parser.add_argument(
+        "--alpha", type=float, default=0.5, help="hybrid: embedding weight"
+    )
     parser.add_argument("--save", action="store_true", help="Write results/*.json")
     args = parser.parse_args()
 
@@ -157,12 +184,23 @@ def main() -> int:
         print(f"Corpus not found at {CORPUS}; see clscisumm.py for how to get it.")
         return 1
     started = time.monotonic()
-    result = evaluate(args.split, args.ranker, args.model)
+    result = evaluate(
+        args.split,
+        args.ranker,
+        args.model,
+        max_window=args.max_window,
+        alpha=args.alpha,
+    )
     rows = result.pop("_rows")
     elapsed = time.monotonic() - started
 
     so, sp = result["sentence_overlap"], result["sentence_overlap_pooled"]
-    name = result["model"] or "random ranking"
+    name = {
+        "embedding": result["model"],
+        "hybrid": f"hybrid BM25 + {result['model']} (alpha {args.alpha})",
+        "bm25": "BM25",
+        "random": "random ranking",
+    }[args.ranker] + (f", windows ≤ {args.max_window}" if args.max_window != 3 else "")
     print(f"CL-SciSumm Task 1A — {name} — split {args.split}")
     print(f"  {result['papers']} papers, {result['citances']} citances, {elapsed:.0f}s")
     print(
@@ -192,7 +230,17 @@ def main() -> int:
 
     if args.save:
         RESULTS.mkdir(exist_ok=True)
-        tag = f"{args.ranker}-{(args.model.split('/')[-1] if args.ranker == 'embedding' else 'seed0')}-{args.split}"
+        model_tag = args.model.split("/")[-1].replace("+", "-")
+        tag = (
+            {
+                "embedding": f"embedding-{model_tag}",
+                "hybrid": f"hybrid-{model_tag}-a{args.alpha}",
+                "bm25": "bm25",
+                "random": "random-seed0",
+            }[args.ranker]
+            + (f"-w{args.max_window}" if args.max_window != 3 else "")
+            + f"-{args.split}"
+        )
         (RESULTS / f"{tag}.json").write_text(json.dumps(result, indent=2) + "\n")
         print(f"  saved results/{tag}.json")
         predictions = HERE.parents[1] / "data" / "raw" / "clscisumm-predictions"

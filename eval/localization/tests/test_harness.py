@@ -7,6 +7,7 @@ Run from the repo root:  backend/.venv/bin/python -m pytest eval
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 HERE = Path(__file__).resolve().parents[1]
@@ -149,3 +150,44 @@ def test_a_citance_with_no_gold_is_skipped(tmp_path):
 def test_citance_key_names_paper_and_number():
     c = Citance("P1", "7", "C1", "t", "m", frozenset({"1"}), "")
     assert c.key == "P1#7" and c.facets == ["none"]
+
+
+# --- rankers and confidence (2.7) ----------------------------------------------
+
+from analyze_confidence import curve  # noqa: E402
+from rankers import _z, bm25_scores, hybrid_scores  # noqa: E402
+
+
+def test_bm25_prefers_the_passage_sharing_rare_terms():
+    passages = [
+        "the model is trained on the data",
+        "we use a maximum entropy parser for the treebank",
+        "the results are reported on the data",
+    ]
+    scores = bm25_scores(passages, ["maximum entropy parser"])
+    assert scores[0].argmax() == 1
+    assert scores[0, 0] == 0.0  # no shared non-stopword term
+
+
+def test_bm25_ignores_stopwords():
+    scores = bm25_scores(["the of and", "parser"], ["the of and"])
+    assert scores.max() == 0.0
+
+
+def test_hybrid_mixes_normalised_scores():
+    lexical = np.array([[0.0, 10.0, 0.0]])
+    dense = np.array([[0.9, 0.1, 0.1]])
+    assert hybrid_scores(lexical, dense, 1.0).argmax() == 0
+    assert hybrid_scores(lexical, dense, 0.0).argmax() == 1
+    # z-normalisation makes the scales comparable: a constant row is all zeros.
+    assert np.allclose(_z(np.array([[3.0, 3.0]])), 0)
+
+
+def test_confidence_curve_counts_only_answers_above_threshold():
+    rows = [
+        {"top": [{"score": 0.9, "sentences": ["1"]}], "gold": ["1"], "hit_at_1": True},
+        {"top": [{"score": 0.5, "sentences": ["2"]}], "gold": ["1"], "hit_at_1": False},
+    ]
+    (t0, share0, acc0, _), (t1, share1, acc1, _) = curve(rows, [0.0, 0.8])
+    assert (share0, acc0) == (1.0, 0.5)
+    assert (share1, acc1) == (0.5, 1.0)
