@@ -110,6 +110,10 @@ class SemanticScholar:
             out.extend(body if isinstance(body, list) else [None] * len(chunk))
         return out
 
+    def paper(self, paper_id: str, fields: str = "title,abstract") -> dict | None:
+        """One paper's metadata — 2.3 uses it for the abstract fallback."""
+        return self._get(f"/paper/{paper_id}", {"fields": fields})
+
     def match_title(self, title: str) -> dict | None:
         """The single best title match, or ``None``. One request per call."""
         body = self._get(
