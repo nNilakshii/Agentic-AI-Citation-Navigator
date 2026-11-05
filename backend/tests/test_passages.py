@@ -137,6 +137,47 @@ def test_a_false_heading_after_the_references_is_not_an_appendix():
     assert result.excluded["after the references, not an appendix"] == 1
 
 
+def test_the_papers_own_title_is_not_a_candidate():
+    # Real case: citing "the ACL Anthology Reference Corpus" ranked that
+    # paper's title first; a title is never the cited passage.
+    title = "The ACL Anthology Reference Corpus: A Reference Dataset for Research"
+    paper = build([(None, [title + " Steven Bird"]), ("1 Introduction", PROSE)])
+    paper.source.title = title
+    result = passages_from_paper(paper)
+    assert result.excluded["title"] == 1
+    assert not any(title in p.text for p in result.passages)
+
+
+def test_a_sentence_that_mentions_a_short_title_is_kept():
+    # Real case: Caruana's "Multitask Learning" — 45 of its sentences contain
+    # the title phrase, and they are the paper.
+    keep = "In this paper we demonstrate multitask learning in three different domains."
+    paper = build([(None, ["Multitask Learning"]), ("1 Introduction", [keep] + PROSE)])
+    paper.source.title = "Multitask Learning"
+    result = passages_from_paper(paper)
+    assert keep in sentence_texts(result, paper)
+
+
+def test_debris_is_not_counted_as_the_title():
+    # Real case: symbol-only sentences squash to "", which is "in" any title.
+    paper = build([("1 Introduction", PROSE[:2] + ["\uf8ef\uf8ef\uf8f0"] + PROSE[2:])])
+    paper.source.title = "Layer Normalization"
+    result = passages_from_paper(paper)
+    assert "title" not in result.excluded
+    assert result.excluded["not prose"] == 1
+
+
+def test_a_heading_that_became_a_sentence_is_not_a_candidate():
+    heading = "3.2 Growth rates of science across all publications"
+    paper = build([("1 Introduction", PROSE[:2] + [heading] + PROSE[2:])])
+    paper.sections.append(
+        paper.sections[0].model_copy(update={"id": 1, "title": heading})
+    )
+    result = passages_from_paper(paper)
+    assert result.excluded["heading"] == 1
+    assert not any(heading in p.text for p in result.passages)
+
+
 def test_acknowledgments_are_left_out():
     thanks = "We thank the anonymous reviewers for their many helpful comments."
     paper = build([("1 Introduction", PROSE), ("Acknowledgments", [thanks])])

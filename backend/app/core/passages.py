@@ -16,6 +16,9 @@ sentence shares the most words with exactly the wrong places:
   bibliography lines for headings ("7 Published as a conference paper at
   ICLR", an author list), and the reference list ends at the next heading —
   so after the references, only appendix-like headings are kept.
+- **The paper's title and its section headings.** A citance that names the
+  cited work ("the ACL Anthology Reference Corpus") matches its title better
+  than any passage; on real citations the title ranked first in 4 of 19.
 - **Acknowledgments.**
 - **Sentences that are not prose**: author and affiliation lines, table and
   equation debris. Front matter is *not* dropped wholesale: when the parser
@@ -36,11 +39,17 @@ from app.models.paper import ParsedPaper, Sentence
 from app.models.passage import Passage, PassageOrigin, PassageSet
 
 #: Bumped when segmentation or exclusion changes.
-PASSAGE_VERSION = "1"
+PASSAGE_VERSION = "2"
 MAX_WINDOW = 3
 #: A window shorter than this says too little to be matched ("See Table 3.").
 MIN_PASSAGE_CHARS = 40
 MIN_WORDS = 4
+#: A title fragment must be this long to count (letters and digits only).
+MIN_TITLE_CHARS = 10
+_FUNCTION_WORDS = frozenset(
+    "a an the is are was were be been we our this that these it its of in on to "
+    "for with by from as at and or which can".split()
+)
 #: Share of tokens that must be words. Table rows and equations fall below.
 MIN_WORD_SHARE = 0.5
 
@@ -67,6 +76,7 @@ def passages_from_paper(paper: ParsedPaper) -> PassageSet:
     if refs_start is None:
         refs_start, refs_end = _references_section(paper)
     titles = {s.id: s.title for s in paper.sections}
+    headings = {_squash(s.title) for s in paper.sections}
     starts = {s.id: s.start_char for s in paper.sections}
 
     def reason(sentence: Sentence) -> str | None:
@@ -82,6 +92,11 @@ def passages_from_paper(paper: ParsedPaper) -> PassageSet:
             return "acknowledgments"
         if not _is_prose(sentence.text):
             return "not prose"
+        text = _squash(sentence.text)
+        if text in headings:
+            return "heading"
+        if _is_title(sentence.text, paper.source.title or ""):
+            return "title"
         return None
 
     runs: list[list[Sentence]] = []
@@ -175,6 +190,32 @@ def _looks_like_appendix(title: str, section_start: int, refs_end: int) -> bool:
     if section_start < refs_end:
         return False
     return bool(_APPENDIX_WORD.match(title) or _APPENDIX_LABEL.match(title))
+
+
+def _is_title(sentence: str, title: str) -> bool:
+    """The title, a piece of it, or the title plus an author list or header.
+
+    Not any sentence that merely contains the title: for a paper called
+    "Multitask Learning", that is half its sentences, including the definition
+    a citation most often points at. The difference is what is left once the
+    title's words are taken out: names and page furniture have no function
+    words; prose does.
+    """
+    text, squashed_title = _squash(sentence), _squash(title)
+    if len(squashed_title) < MIN_TITLE_CHARS or len(text) < MIN_TITLE_CHARS:
+        return False
+    if text in squashed_title:
+        return True
+    if squashed_title not in text:
+        return False
+    title_words = set(re.findall(r"[a-z]+", title.lower()))
+    rest = [w for w in re.findall(r"[a-z]+", sentence.lower()) if w not in title_words]
+    return not any(w in _FUNCTION_WORDS for w in rest)
+
+
+def _squash(text: str) -> str:
+    """Lowercase letters and digits only, for comparing titles and headings."""
+    return re.sub(r"[^a-z0-9]+", "", text.lower())
 
 
 def _is_prose(text: str) -> bool:
