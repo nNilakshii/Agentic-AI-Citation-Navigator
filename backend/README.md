@@ -43,6 +43,7 @@ returns the ones worth reading, each with a span, an importance and a one-line r
 | `GET` | `/api/reader/papers/{paper_id}/citations` | Every citation, linked to its reference entry (2.1) |
 | `POST` | `/api/reader/papers/{paper_id}/references/resolve` | Identify each cited paper via Semantic Scholar (2.2); `?title_search=true` is slow |
 | `GET` | `/api/reader/papers/{paper_id}/references/resolved` | The cached resolution; never calls Semantic Scholar |
+| `POST` | `/api/reader/papers/{paper_id}/citations/{anchor_id}/localize?k=5` | Rank the cited paper's passages for one citation (2.5); fetches and embeds on first use; 503 where sentence-transformers is not installed |
 | `GET` | `/api/reader/papers/{paper_id}/passages` | Candidate passages for localization (2.4), with what was left out and why |
 | `POST` | `/api/reader/papers/{paper_id}/references/{reference_id}/text` | The cited paper's text (2.3): its PDF, parsed and openable as `cited_paper_id`; else its abstract; else `unavailable`, with the reasons |
 | `GET` | `/api/reader/coverage` | Which papers already have a path, per goal — what opens instantly |
@@ -78,6 +79,15 @@ curl -X POST localhost:8000/api/reader/papers/samples/attention-is-all-you-need.
 ```bash
 pytest
 ```
+
+## Localizer spot check (Phase 2.5)
+
+```bash
+python scripts/qa_localize.py --per-paper 2   # needs qa_fetch.py first; no network
+```
+
+Prints real citing sentences and their top passages for a human to judge. Accuracy is
+measured on CL-SciSumm (2.6/2.7), not here.
 
 ## Candidate-passage gate (Phase 2.4)
 

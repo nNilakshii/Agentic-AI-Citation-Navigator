@@ -476,6 +476,31 @@ list). After the references, only appendix-like headings ("A Hyperparameter Sett
 **Result:** 61 papers, median 48% of sentences kept as candidates, ~640 passages each;
 none flagged for leaked bibliography.
 
+## Task 2.5 — localizer v1
+
+### The cited paper's title kept winning
+
+On 19 real citations from the samples, the top passage in 4 was the cited paper's own
+title: a citance naming "the ACL Anthology Reference Corpus" matches that title better than
+anything the paper says. Titles and section headings are now excluded from candidates. The
+first version of that rule then over-reached twice — symbol-only debris reduces to an empty
+string, which is "contained" in every title, and for a paper called "Multitask Learning"
+half its sentences contain the title, including the definition a citation most often
+points at (top-1 at 0.97). A sentence now counts as the title only if what is left once the
+title's words are removed has no function words: an author list or page header, not prose.
+
+### A deploy that would have crashed
+
+The production image installs a subset of requirements without torch, and the localizer
+imports numpy at startup — the next Cloud Run deploy would have failed to boot. numpy is now
+in the production requirements; sentence-transformers is loaded on first use, and without
+it `/localize` answers 503 rather than taking the app down. Checking that the numpy pin had
+a Python 3.12 Linux wheel, my first query used an outdated platform tag and said no; it
+does.
+
+**Result:** plausible top-1 passages on most real citations, ~2s per citation once warm.
+How good is for 2.6 and 2.7 to say on CL-SciSumm.
+
 
 
 1. **Unit tests caught the logic; only a live run caught the damage.** Every bug in B and C

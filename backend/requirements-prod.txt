@@ -16,5 +16,8 @@ python-dotenv==1.0.1
 python-multipart==0.0.9
 
 pymupdf==1.28.2
+# The localizer (2.5) imports numpy at startup; sentence-transformers it loads
+# only when asked, and without it /localize answers 503 instead of crashing.
+numpy==2.5.2
 google-genai==2.18.1
 requests==2.32.3

@@ -460,6 +460,21 @@ What is left out matters more than the cut: the reference list, non-appendix tex
 it, acknowledgments, and non-prose. A citing sentence shares the most words with the
 bibliography entry for the work it cites — the one place that must never be a candidate.
 
+## Decided: localizer v1 is embeddings, measured before anything cleverer
+
+Settled at 2.5 (2026-11-05).
+
+The query is the citing sentence with every citation marker removed — markers say which
+paper, not what about it. Passages (2.4) are ranked by cosine similarity under MiniLM;
+overlapping windows are suppressed so the top-k are distinct places. Scores are reported
+raw: where "confident" begins is for the CL-SciSumm evaluation (2.7) to establish.
+
+**Costs.** Importing sentence-transformers takes ~13s and embedding a paper ~5s on a laptop,
+so the model loads on first use and passage embeddings are cached by model and exact texts.
+**Deployment:** the production image omits torch (~2 GB); `/localize` answers 503 there until
+2.11 decides whether torch ships (memory: ~400 MB with MiniLM against a 1 GiB instance) or
+embeddings are precomputed.
+
 ## Open decisions
 
 - **GROBID adoption** — revisit at 2.1, where structured reference parsing is the task.

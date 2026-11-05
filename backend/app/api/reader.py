@@ -17,12 +17,16 @@ from app.core.citations import CITATION_VERSION, build_citation_map
 from app.core.goals import GOAL_SPECS
 from app.core.pdf_parser import PARSER_VERSION, paper_id_for, parse_pdf
 from app.core.cited_text import fetch_cited_text
+from app.core.embedding import CACHE_DIR as EMBEDDING_CACHE
+from app.core.embedding import Embedder, EmbedderUnavailable, get_embedder
+from app.core.localizer import DEFAULT_K, localize
 from app.core.passages import passages_from_paper
 from app.core.reading_path import RANKER_VERSION, build_reading_path
 from app.core.resolution import RESOLVER_VERSION, resolve_references
 from app.llm.client import LLMClient, LLMError, LLMNotConfigured, get_llm_client
 from app.models.citation import CitationMap
 from app.models.cited import CitedText
+from app.models.localization import Localization
 from app.models.passage import PassageSet
 from app.models.paper import ParsedPaper, PaperSummary, Section
 from app.models.reading import ReadingGoal, ReadingPath
@@ -253,12 +257,7 @@ def cited_text(
     paper's references first if that has not been done.
     """
     paper = _load_or_404(paper_id, store)
-    key = (paper_id, PARSER_VERSION, CITATION_VERSION, RESOLVER_VERSION)
-    resolution = store.load_resolution(*key)
-    if resolution is None:
-        resolution = resolve_references(paper, build_citation_map(paper), scholar)
-        if resolution.complete:
-            store.save_resolution(resolution)
+    resolution = _resolution(paper, store, scholar)
     try:
         return fetch_cited_text(
             paper, reference_id, resolution, store, scholar, downloader, openalex
@@ -267,6 +266,49 @@ def cited_text(
         raise HTTPException(
             status_code=404, detail=f"no reference {reference_id} in {paper_id}"
         ) from error
+
+
+@router.post(
+    "/papers/{paper_id}/citations/{anchor_id}/localize",
+    response_model=Localization,
+    summary="Rank the cited paper's passages for one citation (task 2.5)",
+)
+def localize_citation(
+    paper_id: str,
+    anchor_id: str,
+    k: int = Query(DEFAULT_K, ge=1, le=20),
+    store: PaperStore = Depends(get_store),
+    scholar: SemanticScholar = Depends(get_scholar),
+    downloader: Downloader = Depends(get_downloader),
+    openalex: OpenAlex = Depends(get_openalex),
+    embedder: Embedder = Depends(get_embedder),
+) -> Localization:
+    """Fetch the cited paper if needed (2.3), split it (2.4), and rank.
+
+    The first call for a cited paper downloads, parses and embeds it, which
+    takes seconds; later calls reuse all three.
+    """
+    paper = _load_or_404(paper_id, store)
+    resolution = _resolution(paper, store, scholar)
+    try:
+        return localize(
+            paper,
+            anchor_id,
+            resolution,
+            store,
+            scholar,
+            downloader,
+            openalex,
+            embedder,
+            k,
+            cache_dir=EMBEDDING_CACHE,
+        )
+    except KeyError as error:
+        raise HTTPException(
+            status_code=404, detail=f"no citation {anchor_id} in {paper_id}"
+        ) from error
+    except EmbedderUnavailable as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
 
 
 @router.get("/papers/{paper_id}/pdf", summary="Get the original PDF bytes")
@@ -430,6 +472,19 @@ def _check_paper_id(paper_id: str) -> None:
         raise HTTPException(
             status_code=422, detail="paper_id must be a sha256 hex digest"
         )
+
+
+def _resolution(
+    paper: ParsedPaper, store: PaperStore, scholar: SemanticScholar
+) -> ResolutionMap:
+    """The cached default resolution, or a fresh one (cached only if complete)."""
+    key = (paper.paper_id, PARSER_VERSION, CITATION_VERSION, RESOLVER_VERSION)
+    resolution = store.load_resolution(*key)
+    if resolution is None:
+        resolution = resolve_references(paper, build_citation_map(paper), scholar)
+        if resolution.complete:
+            store.save_resolution(resolution)
+    return resolution
 
 
 def _load_or_404(paper_id: str, store: PaperStore) -> ParsedPaper:

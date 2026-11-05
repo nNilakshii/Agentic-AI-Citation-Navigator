@@ -25,6 +25,9 @@ npm-debug.log*
 # Data & models (keep the repo light)
 data/**/*.pdf
 data/**/*.json
+data/cache/embeddings/
+# Third-party papers fetched by the QA scripts; never published.
+data/fetch-qa/
 data/raw/
 
 # ...except the pre-computed parses and reading paths. These are committed on
