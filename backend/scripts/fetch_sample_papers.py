@@ -75,7 +75,7 @@ ATOM_NS = {
 }
 USER_AGENT = (
     "AURA-Citation-Navigator/0.1 (USC research project; "
-    "https://github.com/; mailto:you@example.com)"
+    "+https://github.com/nNilakshii/Agentic-AI-Citation-Navigator)"
 )
 REQUEST_DELAY_SECONDS = 3.0
 REQUEST_TIMEOUT_SECONDS = 60
