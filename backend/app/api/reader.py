@@ -17,11 +17,13 @@ from app.core.citations import CITATION_VERSION, build_citation_map
 from app.core.goals import GOAL_SPECS
 from app.core.pdf_parser import PARSER_VERSION, paper_id_for, parse_pdf
 from app.core.cited_text import fetch_cited_text
+from app.core.passages import passages_from_paper
 from app.core.reading_path import RANKER_VERSION, build_reading_path
 from app.core.resolution import RESOLVER_VERSION, resolve_references
 from app.llm.client import LLMClient, LLMError, LLMNotConfigured, get_llm_client
 from app.models.citation import CitationMap
 from app.models.cited import CitedText
+from app.models.passage import PassageSet
 from app.models.paper import ParsedPaper, PaperSummary, Section
 from app.models.reading import ReadingGoal, ReadingPath
 from app.models.resolution import ResolutionMap
@@ -155,6 +157,20 @@ def get_citations(paper_id: str, store: PaperStore = Depends(get_store)) -> Cita
     from the parse so that changing it never invalidates cached rankings.
     """
     return build_citation_map(_load_or_404(paper_id, store))
+
+
+@router.get(
+    "/papers/{paper_id}/passages",
+    response_model=PassageSet,
+    summary="Candidate passages the localizer ranks (task 2.4)",
+)
+def get_passages(paper_id: str, store: PaperStore = Depends(get_store)) -> PassageSet:
+    """Windows of one to three sentences, with what was left out and why.
+
+    Usually called on a cited paper (2.3's ``cited_paper_id``). Computed per
+    request, like citations: pure text processing on the cached parse.
+    """
+    return passages_from_paper(_load_or_404(paper_id, store))
 
 
 @router.post(

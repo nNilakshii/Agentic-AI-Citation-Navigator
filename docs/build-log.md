@@ -441,9 +441,40 @@ search under load and gives keyless callers one shared daily budget per IP; the 
 email, which the 0.3 setup relied on, no longer raises any limit. The client honours
 `Retry-After` and takes an optional free key.
 
-**Result:** 59/80 full text (74%), 9 abstract, 12 unavailable; **90.7% of resolved
+**Result (before the key):** 59/80 full text (74%), 9 abstract, 12 unavailable; **90.7% of resolved
 references have some text** (was 81%). The rest: paywalls (ACM, Elsevier, Wiley), workshop
 papers, and 2 searches throttled for want of a key. With a key: **93.3%**, 60/80 full text.
+
+## Task 2.4 — candidate passages
+
+### A check that could not fail
+
+The first QA run reported **0 leaked bibliography sentences out of 16,100**. Tested on the
+text that *had* been removed as bibliography, the same check fired on 1 in 2,400: the
+sentence splitter breaks each entry into fragments ("(1990).", a title, a venue), and no
+fragment carries enough to recognise. Rebuilt on three-sentence windows with combined
+signals, it catches 43% of bibliography windows at 0.19% false alarms on body text — weak
+per entry, enough to notice a whole leaked list. QA now prints that recall on every run,
+so a blind detector is visible.
+
+### The bibliography that became candidates
+
+A fetched 1992 paper ("Class-Based n-gram Models") had its reference list in the
+candidates: the parser had found a "References" section, but the citation detector's
+heading pattern had not, and passages relied on the detector alone. Now either source
+counts. The rebuilt alarm would have caught it — at 2.1% against a 2% threshold, because
+its "Mays, E.; Damerau, ..." style carries weak signals. The structural rules are the
+defence; the alarm is a backstop.
+
+### Not everything after "References" is references
+
+Five of ten samples have appendices after the bibliography, but the parser also turns
+bibliography lines into headings ("7 Published as a conference paper at ICLR", an author
+list). After the references, only appendix-like headings ("A Hyperparameter Settings",
+"Appendix C: ...") are kept.
+
+**Result:** 61 papers, median 48% of sentences kept as candidates, ~640 passages each;
+none flagged for leaked bibliography.
 
 
 

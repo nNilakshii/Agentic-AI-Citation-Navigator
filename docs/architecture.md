@@ -446,6 +446,20 @@ server is public: http(s) only, no private/loopback/link-local addresses on any 
 hop, a 50 MB cap while streaming, a PDF signature check, and arXiv's 3-second pacing.
 Known gap: DNS rebinding between the check and the request.
 
+## Decided: candidates are overlapping sentence windows
+
+Settled at 2.4 (2026-11-04).
+
+The localizer ranks windows of one to three consecutive sentences within a section. Gold
+CL-SciSumm spans are sentence-level, mostly one or two sentences, so every window maps back
+to sentence ids for evaluation; a single sentence often lacks the context to embed well.
+Windows overlap, so 2.5 must suppress near-duplicates of the same region before taking a
+top-k. Computed per request from the cached parse (milliseconds), like citations.
+
+What is left out matters more than the cut: the reference list, non-appendix text after
+it, acknowledgments, and non-prose. A citing sentence shares the most words with the
+bibliography entry for the work it cites — the one place that must never be a candidate.
+
 ## Open decisions
 
 - **GROBID adoption** — revisit at 2.1, where structured reference parsing is the task.
