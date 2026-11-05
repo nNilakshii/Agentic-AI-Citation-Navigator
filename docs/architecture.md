@@ -436,6 +436,11 @@ so a PDF is downloaded once.
 abstract, unavailable — and why each earlier rung failed. The localizer must handle all
 three: on the samples, roughly a quarter of cited papers have no full text we can get.
 
+**Two sources for abstracts.** Semantic Scholar withholds abstracts for many publishers,
+so OpenAlex is the last stop before "unavailable" — by DOI, else by exact title. Each
+abstract records where it came from. OpenAlex search needs a free API key to be reliable
+(keyless search is throttled under load, 2026); without one, DOI lookups still work.
+
 **The downloader is a security boundary.** URLs come from third-party metadata and the
 server is public: http(s) only, no private/loopback/link-local addresses on any redirect
 hop, a 50 MB cap while streaming, a PDF signature check, and arXiv's 3-second pacing.

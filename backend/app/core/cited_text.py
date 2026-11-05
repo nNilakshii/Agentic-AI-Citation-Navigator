@@ -12,6 +12,11 @@ in the samples, papers with an ACL Anthology id or an arXiv DOI often came
 with no link at all. So when those links fail or are missing, one fresh
 lookup — the same request that fetches the abstract — is mined for more.
 
+Semantic Scholar also withholds many abstracts at the publisher's request, so
+the last stop before "unavailable" is OpenAlex: by DOI, else by title, and a
+title hit counts only if it is the same title — a wrong abstract presented as
+the cited paper's would be worse than none.
+
 Only successes are remembered. A failed download may be a passing outage, and
 caching it would turn that into a permanent "unavailable" — the 1.6 lesson.
 """
@@ -24,9 +29,11 @@ from app.cache import PaperStore
 from app.core.pdf_parser import PARSER_VERSION, parse_pdf
 from app.models.cited import CitedText, TextSource
 from app.models.paper import ParsedPaper
+from app.core.resolution import _norm
 from app.models.resolution import ResolutionMap, ResolvedReference
 from app.scholar.client import ScholarError, SemanticScholar
 from app.scholar.download import Downloader, DownloadError
+from app.scholar.openalex import OpenAlex, OpenAlexError, abstract_text
 
 META_FIELDS = "title,abstract,externalIds,openAccessPdf"
 _ARXIV_DOI = re.compile(r"^10\.48550/arxiv\.(.+)$", re.IGNORECASE)
@@ -39,6 +46,7 @@ def fetch_cited_text(
     store: PaperStore,
     scholar: SemanticScholar,
     downloader: Downloader,
+    openalex: OpenAlex | None = None,
 ) -> CitedText:
     """The best text available for one cited work. Raises KeyError if unknown."""
     item = next((i for i in resolution.items if i.reference_id == reference_id), None)
@@ -63,6 +71,7 @@ def fetch_cited_text(
         return found
 
     # Rung 1 again, then rung 2: one fresh lookup gives more links and the abstract.
+    meta: dict = {}
     if item.s2_paper_id:
         try:
             meta = scholar.paper(item.s2_paper_id, fields=META_FIELDS) or {}
@@ -74,13 +83,30 @@ def fetch_cited_text(
             if found:
                 return found
             if meta.get("abstract"):
-                return CitedText(
-                    **base,
-                    source=TextSource.ABSTRACT,
-                    abstract=meta["abstract"],
-                    attempts=attempts,
-                )
+                return _abstract(base, meta["abstract"], "semantic-scholar", attempts)
             attempts.append("Semantic Scholar has no abstract for it")
+
+    # Rung 2 again: OpenAlex, for what Semantic Scholar would not show.
+    if openalex is not None and item.resolved and item.title:
+        doi = item.doi or (meta.get("externalIds") or {}).get("DOI")
+        try:
+            work = _openalex_work(openalex, doi, item.title)
+        except OpenAlexError as exc:
+            attempts.append(f"OpenAlex lookup failed: {exc}")
+        else:
+            if work is None:
+                attempts.append("OpenAlex does not have it")
+            else:
+                oa_pdf = (work.get("best_oa_location") or {}).get("pdf_url")
+                found = _try_pdfs(
+                    _ordered(oa_pdf), tried, item, base, store, downloader, attempts
+                )
+                if found:
+                    return found
+                abstract = abstract_text(work)
+                if abstract:
+                    return _abstract(base, abstract, "openalex", attempts)
+                attempts.append("OpenAlex has no abstract for it")
 
     # Rung 3: say so.
     return CitedText(**base, source=TextSource.UNAVAILABLE, attempts=attempts)
@@ -124,6 +150,28 @@ def _try_pdfs(
         store.save_fetched(url, parsed.paper_id)
         return _full_text(base, parsed, url, attempts)
     return None
+
+
+def _openalex_work(openalex: OpenAlex, doi: str | None, title: str) -> dict | None:
+    """The OpenAlex record for this paper, by DOI or an exactly matching title."""
+    if doi:
+        work = openalex.by_doi(doi)
+        if work:
+            return work
+    work = openalex.by_title(title)
+    if work and _norm(work.get("title") or "") == _norm(title):
+        return work
+    return None
+
+
+def _abstract(base: dict, text: str, origin: str, attempts: list[str]) -> CitedText:
+    return CitedText(
+        **base,
+        source=TextSource.ABSTRACT,
+        abstract=text,
+        abstract_from=origin,
+        attempts=attempts,
+    )
 
 
 def _pdf_urls(item: ResolvedReference) -> list[str]:

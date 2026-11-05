@@ -35,6 +35,9 @@ class CitedText(BaseModel):
         default=None, description="The URL the PDF came from"
     )
     abstract: str | None = None
+    abstract_from: str | None = Field(
+        default=None, description="'semantic-scholar' or 'openalex'"
+    )
     n_sentences: int = 0
     attempts: list[str] = Field(
         default_factory=list,

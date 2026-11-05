@@ -27,6 +27,7 @@ from app.models.reading import ReadingGoal, ReadingPath
 from app.models.resolution import ResolutionMap
 from app.scholar.client import SemanticScholar, get_scholar
 from app.scholar.download import Downloader, get_downloader
+from app.scholar.openalex import OpenAlex, get_openalex
 
 router = APIRouter()
 
@@ -227,6 +228,7 @@ def cited_text(
     store: PaperStore = Depends(get_store),
     scholar: SemanticScholar = Depends(get_scholar),
     downloader: Downloader = Depends(get_downloader),
+    openalex: OpenAlex = Depends(get_openalex),
 ) -> CitedText:
     """Get the text of the work one reference points at.
 
@@ -243,7 +245,7 @@ def cited_text(
             store.save_resolution(resolution)
     try:
         return fetch_cited_text(
-            paper, reference_id, resolution, store, scholar, downloader
+            paper, reference_id, resolution, store, scholar, downloader, openalex
         )
     except KeyError as error:
         raise HTTPException(

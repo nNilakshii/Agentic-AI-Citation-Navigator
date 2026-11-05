@@ -35,6 +35,7 @@ from app.core.resolution import resolve_references  # noqa: E402
 from app.models.cited import TextSource  # noqa: E402
 from app.scholar.client import SemanticScholar  # noqa: E402
 from app.scholar.download import Downloader  # noqa: E402
+from app.scholar.openalex import OpenAlex  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 SAMPLES = ROOT / "data" / "samples"
@@ -49,9 +50,10 @@ def main() -> int:
     args = parser.parse_args()
 
     samples, qa_store = PaperStore(), PaperStore(QA_STORE)
-    scholar, downloader = SemanticScholar(), Downloader()
+    scholar, downloader, openalex = SemanticScholar(), Downloader(), OpenAlex()
     outcomes: Counter[TextSource] = Counter()
     reasons: Counter[str] = Counter()
+    abstracts_from: Counter[str] = Counter()
     sentences: list[int] = []
     unavailable: list[str] = []
     resolved_n = resolved_with_text = 0
@@ -70,12 +72,20 @@ def main() -> int:
         row: Counter[TextSource] = Counter()
         for item in resolution.items[: args.limit]:
             result = fetch_cited_text(
-                paper, item.reference_id, resolution, qa_store, scholar, downloader
+                paper,
+                item.reference_id,
+                resolution,
+                qa_store,
+                scholar,
+                downloader,
+                openalex,
             )
             row[result.source] += 1
             reasons.update(_reason(a) for a in result.attempts)
             if result.source is TextSource.FULL_TEXT:
                 sentences.append(result.n_sentences)
+            if result.abstract_from:
+                abstracts_from[result.abstract_from] += 1
             if item.resolved:
                 resolved_n += 1
                 resolved_with_text += result.source is not TextSource.UNAVAILABLE
@@ -101,6 +111,11 @@ def main() -> int:
         print(
             f"Full-text parses: median {statistics.median(sentences):.0f} sentences, "
             f"smallest {min(sentences)}."
+        )
+    if abstracts_from:
+        print(
+            "Abstracts from: "
+            + ", ".join(f"{k} {v}" for k, v in abstracts_from.most_common())
         )
     if reasons:
         print("\nWhy PDF or abstract attempts failed:")

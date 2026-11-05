@@ -430,9 +430,20 @@ deployed image can serve the samples. A QA run would have staged dozens of other
 papers for a public repo. The QA script uses its own gitignored store (`data/fetch-qa/`);
 papers opened through the app are caught by `prune_cache.py --check`.
 
-**Result:** 59/80 full text, 2 abstract, 19 unavailable; 81% of resolved references have
-some text, under the 85% bar. The rest: paywalls (ACM, Elsevier, Wiley), elided
-abstracts, workshop papers.
+### OpenAlex fills the abstracts, and changed its rules
+
+OpenAlex had abstracts for 7 of the papers whose abstracts Semantic Scholar withheld (stored
+as a word → positions index, rebuilt into prose). A title hit counts only if it is the same
+title: a wrong abstract shown as the cited paper's is worse than none. Two title searches
+found nothing at first because `:` is filter syntax ("TVM: An Automated ..."); then the same
+two answered 429 on every retry. The response body said why: OpenAlex now throttles keyless
+search under load and gives keyless callers one shared daily budget per IP; the `mailto`
+email, which the 0.3 setup relied on, no longer raises any limit. The client honours
+`Retry-After` and takes an optional free key.
+
+**Result:** 59/80 full text (74%), 9 abstract, 12 unavailable; **90.7% of resolved
+references have some text** (was 81%). The rest: paywalls (ACM, Elsevier, Wiley), workshop
+papers, and 2 searches throttled for want of a key.
 
 
 

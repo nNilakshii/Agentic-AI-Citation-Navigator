@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     semantic_scholar_api_key: str | None = None
     openalex_email: str | None = None
+    #: Free from openalex.org. Without one, search is throttled under load and
+    #: all keyless callers on an IP share one small daily budget.
+    openalex_api_key: str | None = None
 
     #: Comma-separated origins allowed to call the API. The deployed frontend
     #: lives on a different host from the backend, so it must be named here.

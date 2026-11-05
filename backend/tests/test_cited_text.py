@@ -20,6 +20,7 @@ from app.models.resolution import ResolutionMap, ResolvedReference
 from app.scholar import download
 from app.scholar.client import ScholarError, get_scholar
 from app.scholar.download import Downloader, DownloadError, check_url, get_downloader
+from app.scholar.openalex import OpenAlex, OpenAlexError, abstract_text, get_openalex
 
 # --- the downloader ---------------------------------------------------------
 
@@ -408,6 +409,220 @@ def test_a_link_that_failed_is_not_tried_again_after_the_lookup(tmp_path):
     assert fetcher.requested == [ARXIV]
 
 
+# --- OpenAlex, for abstracts Semantic Scholar withholds -----------------------
+
+
+class FakeOpenAlex:
+    def __init__(self, by_doi=None, by_title=None, fail=False):
+        self._doi = by_doi or {}
+        self._title = by_title
+        self._fail = fail
+        self.calls = []
+
+    def by_doi(self, doi):
+        self.calls.append(("doi", doi))
+        if self._fail:
+            raise OpenAlexError("HTTP 503")
+        return self._doi.get(doi)
+
+    def by_title(self, title):
+        self.calls.append(("title", title))
+        if self._fail:
+            raise OpenAlexError("HTTP 503")
+        return self._title
+
+
+def work(title="Cited Work", words=("We", "study", "X."), pdf=None):
+    return {
+        "title": title,
+        "abstract_inverted_index": {w: [i] for i, w in enumerate(words)},
+        "best_oa_location": {"pdf_url": pdf} if pdf else None,
+    }
+
+
+def test_abstract_text_rebuilds_word_order():
+    index = {"the": [0, 3], "cat": [1], "saw": [2], "dog": [4]}
+    assert abstract_text({"abstract_inverted_index": index}) == "the cat saw the dog"
+    assert abstract_text({"abstract_inverted_index": None}) is None
+
+
+def test_openalex_supplies_the_abstract_semantic_scholar_withheld(tmp_path):
+    # Real case: "Physicists Reading Physics" — elided by the publisher on S2.
+    oa = FakeOpenAlex(by_doi={"10.1/x": work()})
+    res = resolution(s2_paper_id="s", doi="10.1/x")
+    result = fetch_cited_text(
+        CITING,
+        "r001",
+        res,
+        PaperStore(tmp_path),
+        FakeScholar(None),
+        FakeDownloader({}),
+        oa,
+    )
+    assert result.source is TextSource.ABSTRACT
+    assert result.abstract == "We study X."
+    assert result.abstract_from == "openalex"
+    assert "Semantic Scholar has no abstract for it" in result.attempts
+
+
+def test_a_semantic_scholar_abstract_says_where_it_came_from(tmp_path):
+    oa = FakeOpenAlex(by_doi={"10.1/x": work()})
+    res = resolution(s2_paper_id="s", doi="10.1/x")
+    result = fetch_cited_text(
+        CITING,
+        "r001",
+        res,
+        PaperStore(tmp_path),
+        FakeScholar("S2."),
+        FakeDownloader({}),
+        oa,
+    )
+    assert result.abstract_from == "semantic-scholar"
+    assert oa.calls == []  # OpenAlex is only asked when needed
+
+
+def test_a_title_hit_counts_only_if_it_is_the_same_title(tmp_path):
+    oa = FakeOpenAlex(by_title=work(title="Cited Work, Revisited"))
+    result = fetch_cited_text(
+        CITING,
+        "r001",
+        resolution(s2_paper_id="s"),
+        PaperStore(tmp_path),
+        FakeScholar(None),
+        FakeDownloader({}),
+        oa,
+    )
+    assert result.source is TextSource.UNAVAILABLE
+    assert "OpenAlex does not have it" in result.attempts
+
+
+def test_a_title_hit_with_different_case_and_punctuation_counts(tmp_path):
+    oa = FakeOpenAlex(by_title=work(title="cited  work"))
+    result = fetch_cited_text(
+        CITING,
+        "r001",
+        resolution(s2_paper_id="s"),
+        PaperStore(tmp_path),
+        FakeScholar(None),
+        FakeDownloader({}),
+        oa,
+    )
+    assert result.source is TextSource.ABSTRACT
+
+
+def test_an_openalex_pdf_is_tried_before_its_abstract(tmp_path, synthetic_pdf):
+    url = "https://example.org/oa-from-openalex.pdf"
+    oa = FakeOpenAlex(by_doi={"10.1/x": work(pdf=url)})
+    res = resolution(s2_paper_id="s", doi="10.1/x")
+    result = fetch_cited_text(
+        CITING,
+        "r001",
+        res,
+        PaperStore(tmp_path),
+        FakeScholar(None),
+        FakeDownloader({url: synthetic_pdf}),
+        oa,
+    )
+    assert result.source is TextSource.FULL_TEXT
+    assert result.fetched_from == url
+
+
+def test_an_openalex_failure_is_reported(tmp_path):
+    result = fetch_cited_text(
+        CITING,
+        "r001",
+        resolution(s2_paper_id="s"),
+        PaperStore(tmp_path),
+        FakeScholar(None),
+        FakeDownloader({}),
+        FakeOpenAlex(fail=True),
+    )
+    assert result.source is TextSource.UNAVAILABLE
+    assert any("OpenAlex lookup failed" in a for a in result.attempts)
+
+
+def test_an_unidentified_reference_never_reaches_openalex(tmp_path):
+    oa = FakeOpenAlex(by_title=work())
+    fetch_cited_text(
+        CITING,
+        "r001",
+        resolution(),
+        PaperStore(tmp_path),
+        FakeScholar(),
+        FakeDownloader({}),
+        oa,
+    )
+    assert oa.calls == []
+
+
+class OASession:
+    def __init__(self, status=200, body=None, headers=None):
+        self.status, self.body, self.params = status, body, []
+        self.headers = headers or {}
+
+    def get(self, url, params=None, timeout=None):
+        self.params.append(params)
+        status, body, hdrs = self.status, self.body, self.headers
+
+        class R:
+            status_code = status
+            headers = hdrs
+
+            def json(self):
+                return body
+
+        return R()
+
+
+def test_title_search_strips_filter_syntax(tmp_path, monkeypatch):
+    # Real case: "TVM: An Automated ..." found nothing — ':' is filter syntax.
+    monkeypatch.setattr("app.scholar.openalex.MIN_INTERVAL", 0)
+    session = OASession(body={"results": [work()]})
+    client = OpenAlex(email="e@x", api_key="", cache_dir=tmp_path, session=session)
+    client.by_title("TVM: An Automated, End-to-End Compiler")
+    sent = session.params[0]["filter"]
+    assert ":" not in sent.removeprefix("title.search:") and "," not in sent
+
+
+def test_openalex_caches_answers_without_the_email(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.scholar.openalex.MIN_INTERVAL", 0)
+    session = OASession(status=404)
+    client = OpenAlex(
+        email="someone@example.edu", api_key="", cache_dir=tmp_path, session=session
+    )
+    assert client.by_doi("10.1/none") is None
+    assert client.by_doi("10.1/none") is None
+    assert client.network_calls == 1  # the 404 was cached as an answer
+    assert session.params[0]["mailto"] == "someone@example.edu"
+    for path in tmp_path.iterdir():
+        assert "someone" not in path.read_text()
+
+
+def test_openalex_honours_retry_after_and_sends_the_key(tmp_path, monkeypatch):
+    # Keyless search under load answers 429 with Retry-After ~30s.
+    monkeypatch.setattr("app.scholar.openalex.MIN_INTERVAL", 0)
+    slept = []
+    monkeypatch.setattr("app.scholar.openalex.time.sleep", slept.append)
+    session = OASession(status=429, headers={"Retry-After": "32"})
+    client = OpenAlex(email=None, api_key="k", cache_dir=tmp_path, session=session)
+    with pytest.raises(OpenAlexError):
+        client.by_title("Cited Work")
+    assert slept == [32.0, 32.0]
+    assert session.params[0]["api_key"] == "k"
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_openalex_failures_are_not_cached(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.scholar.openalex.MIN_INTERVAL", 0)
+    monkeypatch.setattr("app.scholar.openalex.time.sleep", lambda s: None)
+    client = OpenAlex(
+        email=None, api_key="", cache_dir=tmp_path, session=OASession(status=503)
+    )
+    with pytest.raises(OpenAlexError):
+        client.by_doi("10.1/x")
+    assert list(tmp_path.iterdir()) == []
+
+
 # --- the endpoint -----------------------------------------------------------
 
 
@@ -417,6 +632,7 @@ def test_endpoint_fetches_and_404s(tmp_path, synthetic_pdf, monkeypatch):
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_scholar] = lambda: FakeScholar("Abs.")
     app.dependency_overrides[get_downloader] = lambda: FakeDownloader({})
+    app.dependency_overrides[get_openalex] = lambda: FakeOpenAlex()
     try:
         uploaded = client.post(
             "/api/reader/papers",

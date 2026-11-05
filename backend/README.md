@@ -85,7 +85,8 @@ python scripts/qa_fetch.py              # first 5 references of each sample
 python scripts/qa_fetch.py --limit 20 --papers attention-is-all-you-need
 ```
 
-Reports full text / abstract / unavailable, and groups why each attempt failed. Fetched
+Reports full text / abstract / unavailable, and groups why each attempt failed. Set
+`OPENALEX_API_KEY` (free) or some OpenAlex title searches will be throttled. Fetched
 papers go to `data/fetch-qa/` (gitignored), never the committed cache. A cold run is paced
 by arXiv (one request per 3s).
 
