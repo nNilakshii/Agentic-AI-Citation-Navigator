@@ -100,6 +100,17 @@ def rank_passages(
         else embedder.encode([p.text for p in passages])
     )
     scores = vectors @ embedder.encode([query])[0]
+    return select_top(passages, scores, k)
+
+
+def select_top(
+    passages: list[Passage], scores: np.ndarray, k: int = DEFAULT_K
+) -> list[LocalizedPassage]:
+    """The ``k`` best-scoring passages, skipping any that overlap a better one.
+
+    Shared by the endpoint and the CL-SciSumm harness (2.6), so what is
+    evaluated is what is served.
+    """
     chosen: list[LocalizedPassage] = []
     taken: list[tuple[int, int]] = []
     for index in np.argsort(-scores, kind="stable"):

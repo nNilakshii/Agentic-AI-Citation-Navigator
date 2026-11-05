@@ -1,0 +1,50 @@
+{
+  "split": "all",
+  "ranker": "embedding",
+  "model": "sentence-transformers/all-MiniLM-L6-v2",
+  "passage_version": "2",
+  "localizer_version": "1",
+  "papers": 40,
+  "citances": 753,
+  "sentence_overlap": {
+    "precision": 0.11196083004989026,
+    "recall": 0.13919118270523037,
+    "f1": 0.12166941035926278
+  },
+  "sentence_overlap_pooled": {
+    "precision": 0.10709117221418235,
+    "recall": 0.1276962899050906,
+    "f1": 0.11648957103502558
+  },
+  "rouge_l_f1": 0.24450741856733768,
+  "accuracy_at_k": {
+    "1": 0.1699867197875166,
+    "3": 0.3399734395750332,
+    "5": 0.46082337317397076,
+    "10": 0.6162018592297477
+  },
+  "gold_fully_in_candidates": 0.9787516600265604,
+  "gold_partly_in_candidates": 0.9920318725099602,
+  "accuracy_at_1_by_facet": {
+    "aim": {
+      "n": 62,
+      "acc": 0.08064516129032258
+    },
+    "hypothesis": {
+      "n": 18,
+      "acc": 0.2222222222222222
+    },
+    "implication": {
+      "n": 60,
+      "acc": 0.2833333333333333
+    },
+    "method": {
+      "n": 564,
+      "acc": 0.16312056737588654
+    },
+    "results": {
+      "n": 105,
+      "acc": 0.18095238095238095
+    }
+  }
+}
