@@ -501,6 +501,38 @@ does.
 **Result:** plausible top-1 passages on most real citations, ~2s per citation once warm.
 How good is for 2.6 and 2.7 to say on CL-SciSumm.
 
+## Task 2.6 — the CL-SciSumm harness
+
+### The benchmark's home had vanished
+
+`WING-NUS/scisumm-corpus`, which every CL-SciSumm paper cites, now returns 404. A complete
+mirror exists (`robinsdeepak/scisumm-corpus-fs`, July 2020); its provenance is recorded in
+the loader, and nothing from it is executed — the official evaluation script was read to
+copy its metric definition, not run. In the mirror, the 2018 test set has no gold answers
+(0 of 339 rows), and ScisummNet's 978 papers are machine-annotated. The evaluation set is
+the human-annotated part of the 2019 training set: 40 papers, 753 citances, every gold
+sentence id present in its paper.
+
+### Evaluate in the benchmark's sentence space, with the app's own code
+
+Gold answers are sentence ids in the corpus's XML. Scoring our PDF parse against them would
+count every sentence-boundary disagreement as a localization miss, so each reference paper
+is rebuilt from the corpus sentences and passed through the app's own passage (2.4) and
+ranking (2.5) code — overlap suppression was factored out so harness and endpoint share it.
+Two numbers keep the rest honest: a random ranking (the floor) and how often the gold
+survives 2.4's exclusions at all (the ceiling: 97.9%).
+
+### Small things that would have skewed the queries
+
+The annotated marker is sometimes spelled differently from the text ("Tillman" vs
+"Tillmann"), so every citation pattern is stripped, as production strips every anchor; a
+narrative-citation pattern took the ")" of "(Smith et al., 1999)" but not the "(" — caught
+by a test; and some text was UTF-8 read as cp1252 ("â€œ").
+
+**Result:** MiniLM, all 753 citances — accuracy@1 17.0%, @5 46.1%, @10 61.6%; sentence F1
+0.122 (random: 1.3% and 0.010). For scale, not comparison: the 2019 overview's best Task 1A
+F1 was 0.126, on its own test set.
+
 
 
 1. **Unit tests caught the logic; only a live run caught the damage.** Every bug in B and C

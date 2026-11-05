@@ -475,6 +475,20 @@ so the model loads on first use and passage embeddings are cached by model and e
 2.11 decides whether torch ships (memory: ~400 MB with MiniLM against a 1 GiB instance) or
 embeddings are precomputed.
 
+## Decided: how localization is measured
+
+Settled at 2.6 (2026-11-05).
+
+CL-SciSumm Task 1A, on the 753 human-annotated citances of the 2019 training set (40
+reference papers; the canonical repository is gone, a complete mirror is used). Reference
+papers are rebuilt from the corpus's own sentence split, so gold ids are our ids, and run
+through the app's own passage and ranking code. Metrics: sentence-overlap P/R/F1 as the
+official script computes it (pooled per paper, averaged over papers), ROUGE-L (own
+implementation, approximate against the literature), and accuracy@k for k = 1, 3, 5, 10 —
+the number closest to a reader scanning a ranked list. Every run also reports a random
+floor and candidate coverage. Papers are split dev/test by a hash of their id; anything
+tuned in 2.7+ is tuned on dev and reported on test.
+
 ## Open decisions
 
 - **GROBID adoption** — revisit at 2.1, where structured reference parsing is the task.
