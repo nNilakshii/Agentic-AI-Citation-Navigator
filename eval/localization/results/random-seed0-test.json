@@ -1,0 +1,52 @@
+{
+  "split": "test",
+  "ranker": "random",
+  "model": null,
+  "max_window": 3,
+  "alpha": null,
+  "passage_version": "2",
+  "localizer_version": "1",
+  "papers": 19,
+  "citances": 440,
+  "sentence_overlap": {
+    "precision": 0.00887596299033465,
+    "recall": 0.008561600544102382,
+    "f1": 0.008634838028156613
+  },
+  "sentence_overlap_pooled": {
+    "precision": 0.006002400960384154,
+    "recall": 0.007575757575757576,
+    "f1": 0.006697923643670462
+  },
+  "rouge_l_f1": 0.10195119343930102,
+  "accuracy_at_k": {
+    "1": 0.00909090909090909,
+    "3": 0.04772727272727273,
+    "5": 0.08409090909090909,
+    "10": 0.14545454545454545
+  },
+  "gold_fully_in_candidates": 0.9795454545454545,
+  "gold_partly_in_candidates": 0.990909090909091,
+  "accuracy_at_1_by_facet": {
+    "aim": {
+      "n": 30,
+      "acc": 0.0
+    },
+    "hypothesis": {
+      "n": 3,
+      "acc": 0.0
+    },
+    "implication": {
+      "n": 41,
+      "acc": 0.0
+    },
+    "method": {
+      "n": 319,
+      "acc": 0.012539184952978056
+    },
+    "results": {
+      "n": 71,
+      "acc": 0.0
+    }
+  }
+}

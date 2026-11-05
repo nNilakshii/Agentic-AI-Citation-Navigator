@@ -489,6 +489,28 @@ the number closest to a reader scanning a ranked list. Every run also reports a 
 floor and candidate coverage. Papers are split dev/test by a hash of their id; anything
 tuned in 2.7+ is tuned on dev and reported on test.
 
+## Decided: localizer v2 is BM25 + MiniLM, with a margin-based "clear match"
+
+Settled at 2.7 (2026-11-06), on the CL-SciSumm dev split, checked once on test.
+
+| Ranker (dev) | Sentence F1 | acc@1 | acc@5 |
+|---|---|---|---|
+| **BM25 + MiniLM, α 0.7** | **0.182** | **21.7%** | **50.2%** |
+| BM25 | 0.152 | 17.9% | 49.2% |
+| MiniLM | 0.130 | 17.3% | 45.7% |
+| mpnet-base | 0.112 | 14.7% | 42.8% |
+| SPECTER2 + proximity adapter | 0.108 | 15.3% | 35.5% |
+
+On test the hybrid scores F1 0.166, acc@1 23.0%, acc@5 54.3% (random: 0.009, 0.9%). Each side
+is z-normalised per query over the paper's passages and mixed 0.3 / 0.7; BM25 is pure Python,
+so the production image gains no dependency. Scores are therefore in standard deviations,
+not cosine similarities.
+
+A localization is a **clear match** when the top passage leads the runner-up by ≥ 0.75. The
+raw score barely separates right from wrong; the margin does. Clear matches are right about
+36% of the time against 23% overall — the UI (2.11/2.12) should present them as "likely" and
+everything else as a ranked list to check, never as certain.
+
 ## Open decisions
 
 - **GROBID adoption** — revisit at 2.1, where structured reference parsing is the task.

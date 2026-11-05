@@ -533,6 +533,37 @@ by a test; and some text was UTF-8 read as cp1252 ("â€œ").
 0.122 (random: 1.3% and 0.010). For scale, not comparison: the 2019 overview's best Task 1A
 F1 was 0.126, on its own test set.
 
+## Task 2.7 — what the baseline is worth
+
+### The scientific model lost, and so did the bigger one
+
+SPECTER2 with its proximity adapter — the model the literature review recommended — scored
+below MiniLM on dev (F1 0.108 vs 0.130), as did the larger general-purpose mpnet (0.112).
+SPECTER2 was trained to compare whole papers by title and abstract; this task compares one
+sentence with another. Plain BM25 beat all three embedding models (0.152): citing sentences
+reuse the cited paper's own terms, which exact matching rewards and an embedding blurs. The
+mix of BM25 and MiniLM beat everything (0.182 at α 0.7; 0.129 at 0.9, where BM25 barely
+counts) and held on test (0.166 vs BM25 0.146, MiniLM 0.112). Single-sentence candidates did
+worse than 1–3-sentence windows (acc@1 13.4% vs 17.3%), confirming 2.4's choice.
+
+### The score does not say when it is right
+
+Keeping only the 11% highest-scoring answers raised accuracy@1 from 17% to just 23%. How far
+the best passage leads the runner-up was far more telling: the clearest 10% were right ~40%
+of the time on both splits. For the hybrid, a margin of 0.75 (picked on dev) marks a clear
+match: 23% of test citances, right 35.6% of the time against 23.0% overall.
+
+### Two runs died with the session, and one test proved nothing
+
+Background evaluation runs were killed when sessions ended, twice; they now run in the
+foreground, and embeddings are cached per paper so a timeout keeps its progress. A new test
+meant to show that exact terms matter passed for the wrong reason — the fake embedder is
+itself bag-of-words — and now uses one that sees every text as identical; it fails without
+BM25.
+
+**Result:** the app serves the hybrid (localizer v2) with a `clear_match` flag. On test:
+accuracy@1 23.0%, @5 54.3%, sentence F1 0.166.
+
 
 
 1. **Unit tests caught the logic; only a live run caught the damage.** Every bug in B and C

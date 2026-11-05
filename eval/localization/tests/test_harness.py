@@ -155,7 +155,8 @@ def test_citance_key_names_paper_and_number():
 # --- rankers and confidence (2.7) ----------------------------------------------
 
 from analyze_confidence import curve  # noqa: E402
-from rankers import _z, bm25_scores, hybrid_scores  # noqa: E402
+from app.core.lexical import _z  # noqa: E402
+from rankers import bm25_scores, hybrid_scores  # noqa: E402
 
 
 def test_bm25_prefers_the_passage_sharing_rare_terms():

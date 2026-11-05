@@ -184,6 +184,44 @@ def test_overlapping_windows_are_suppressed():
     assert ids == ["p0", "p1"]
 
 
+class Blind:
+    """Sees every text as the same vector: meaning can rank nothing."""
+
+    model = "fake-blind"
+
+    def encode(self, texts):
+        return np.ones((len(texts), 4), dtype=np.float32) / 2
+
+
+def test_exact_terms_count_alongside_meaning():
+    # With the embedding side blind, only BM25 can find the passage sharing
+    # the citance's rare terms — so a hit here proves the lexical side is used.
+    passages = [
+        passage("evaluation uses the standard split of the corpus", 0, 50, "p0"),
+        passage("we describe the maxent parser in detail", 60, 100, "p1"),
+        passage("the tagger handles unknown words with suffixes", 110, 160, "p2"),
+    ]
+    ranked = rank_passages("maxent parser", passages, Blind(), k=3)
+    assert ranked[0].passage.id == "p1"
+
+
+def test_a_clear_match_needs_a_clear_lead():
+    from app.core.localizer import CLEAR_MARGIN, is_clear_match
+    from app.models.localization import LocalizedPassage
+
+    def result(*scores):
+        return [
+            LocalizedPassage(
+                rank=i + 1, score=s, passage=passage("x", i * 10, i * 10 + 5)
+            )
+            for i, s in enumerate(scores)
+        ]
+
+    assert is_clear_match(result(2.0, 2.0 - CLEAR_MARGIN))
+    assert not is_clear_match(result(2.0, 2.0 - CLEAR_MARGIN + 0.01))
+    assert not is_clear_match(result(3.0))  # no runner-up, no margin
+
+
 def test_k_limits_the_results():
     passages = [
         passage(f"word{i} attention", i * 20, i * 20 + 15, f"p{i}") for i in range(10)
@@ -268,6 +306,8 @@ def test_localize_ranks_the_cited_full_text(tmp_path, monkeypatch):
     assert result.cited_paper_id == "d" * 64
     assert "Vaswani" not in result.query
     assert result.results[0].passage.text == CITED_SENTENCES[1]
+    assert result.localizer_version == "2"
+    assert len(result.results) == 2
 
 
 def test_localize_falls_back_to_the_abstract(tmp_path, monkeypatch):

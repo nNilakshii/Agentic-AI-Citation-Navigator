@@ -8,7 +8,10 @@ from app.models.passage import Passage
 
 class LocalizedPassage(BaseModel):
     rank: int = Field(description="1 = best")
-    score: float = Field(description="Cosine similarity to the citing sentence")
+    score: float = Field(
+        description="Hybrid BM25 + embedding score, in standard deviations above "
+        "the paper's average passage"
+    )
     passage: Passage
 
 
@@ -24,6 +27,11 @@ class Localization(BaseModel):
     model: str
     localizer_version: str
     results: list[LocalizedPassage] = Field(default_factory=list)
+    clear_match: bool = Field(
+        default=False,
+        description="The top passage clearly leads the rest. On CL-SciSumm, right "
+        "about 36% of the time versus 23% overall — a hint, not a guarantee.",
+    )
     notes: list[str] = Field(
         default_factory=list,
         description="Why the search was narrowed or empty, in plain words.",

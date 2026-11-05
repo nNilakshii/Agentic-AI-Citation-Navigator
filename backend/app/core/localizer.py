@@ -13,8 +13,13 @@ passage of the cited paper (2.4), and rank by cosine similarity.
 - **The source is reported.** Ranking over an abstract answers a weaker
   question than ranking over the full text, and the result says which it was.
 
-The scores are raw cosine similarities; what counts as confident is for the
-evaluation (2.7) to establish, not for this module to guess.
+- **Scores mix exact terms and meaning (v2).** BM25 and MiniLM, each
+  normalised per query, weighted 0.3 / 0.7 — the best of five rankers on
+  CL-SciSumm's dev split, confirmed on test (2.7). Scores are in standard
+  deviations above the paper's average passage, not cosine similarities.
+- **A clear match is flagged by margin, not score.** How far the best passage
+  leads the runner-up predicts correctness far better than how high it scores:
+  on test, clear matches were right 36% of the time against 23% overall.
 """
 
 from __future__ import annotations
@@ -27,6 +32,7 @@ from app.cache import PaperStore
 from app.core.citations import build_citation_map
 from app.core.cited_text import fetch_cited_text
 from app.core.embedding import Embedder, encode_cached
+from app.core.lexical import bm25_scores, hybrid_scores
 from app.core.passages import passages_from_abstract, passages_from_paper
 from app.core.pdf_parser import PARSER_VERSION
 from app.models.citation import CitationMap
@@ -40,8 +46,11 @@ from app.scholar.download import Downloader
 from app.scholar.openalex import OpenAlex
 
 #: Bumped when the query, scoring or suppression changes.
-LOCALIZER_VERSION = "1"
+LOCALIZER_VERSION = "2"
 DEFAULT_K = 5
+#: Lead of the best passage over the runner-up, in hybrid-score units, at and
+#: above which a localization is a "clear match" — chosen on the dev split.
+CLEAR_MARGIN = 0.75
 #: Context taken around an anchor that no sentence contains.
 _FALLBACK_CONTEXT = 200
 
@@ -99,8 +108,16 @@ def rank_passages(
         if cache_dir is not None
         else embedder.encode([p.text for p in passages])
     )
-    scores = vectors @ embedder.encode([query])[0]
-    return select_top(passages, scores, k)
+    dense = (vectors @ embedder.encode([query])[0])[None, :]
+    lexical = bm25_scores([p.text for p in passages], [query])
+    return select_top(passages, hybrid_scores(lexical, dense)[0], k)
+
+
+def is_clear_match(results: list[LocalizedPassage]) -> bool:
+    """The best passage leads the runner-up by at least ``CLEAR_MARGIN``."""
+    if len(results) < 2:
+        return False
+    return results[0].score - results[1].score >= CLEAR_MARGIN
 
 
 def select_top(
@@ -181,5 +198,8 @@ def localize(
         result.notes.append("no text of the cited paper to search")
         return result
 
-    result.results = rank_passages(query, passages.passages, embedder, k, cache_dir)
+    # The margin needs a runner-up, so rank at least two even when k is 1.
+    ranked = rank_passages(query, passages.passages, embedder, max(k, 2), cache_dir)
+    result.clear_match = is_clear_match(ranked)
+    result.results = ranked[:k]
     return result
