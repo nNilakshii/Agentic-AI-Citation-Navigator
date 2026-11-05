@@ -398,6 +398,42 @@ to take its surrounding whitespace with it, on both sides.
 
 **Result:** 495/513 references resolved (96.5%), 370/513 with a fetchable PDF (72.1%).
 
+## Task 2.3 — fetching the cited paper
+
+### The server now downloads URLs a stranger chose
+
+Open-access links come from third-party metadata, and the backend is public. A link to
+`localhost` or the cloud metadata address (169.254.169.254) would make the server fetch
+from inside its own network. Every hop is checked — redirects are followed by hand, since
+a public link can redirect inward — with a size cap enforced while streaming and a `%PDF-`
+check, because publishers answer "PDF" links with HTML login pages.
+
+### The link was there, just not where I looked
+
+The first live run: 61% full text, and 20 "no abstract" results for papers that are
+plainly online — SciBERT is on arXiv. Semantic Scholar's reference list had matched a
+sparser record of each paper than a direct lookup returns. The direct lookup knew ACL
+Anthology ids (every ACL paper is free at a URL built from its id) and arXiv's own DOIs
+(`10.48550/arXiv.1903.10676`). One fresh lookup, the request already made for the
+abstract, is now mined for links first: **61% → 74% full text**.
+
+### The abstract fallback is weaker than planned
+
+Semantic Scholar withholds abstracts for many publishers ("fields elided by the
+publisher"), including much of the ACL Anthology and ICLR. Of 80 references, the abstract
+rescued only 2.
+
+### Fetched papers must not land in the committed cache
+
+A cited paper parses into `data/cache/parsed/`, the one cache directory committed so the
+deployed image can serve the samples. A QA run would have staged dozens of other people's
+papers for a public repo. The QA script uses its own gitignored store (`data/fetch-qa/`);
+papers opened through the app are caught by `prune_cache.py --check`.
+
+**Result:** 59/80 full text, 2 abstract, 19 unavailable; 81% of resolved references have
+some text, under the 85% bar. The rest: paywalls (ACM, Elsevier, Wiley), elided
+abstracts, workshop papers.
+
 
 
 1. **Unit tests caught the logic; only a live run caught the damage.** Every bug in B and C

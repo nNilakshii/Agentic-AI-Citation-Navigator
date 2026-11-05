@@ -43,6 +43,7 @@ returns the ones worth reading, each with a span, an importance and a one-line r
 | `GET` | `/api/reader/papers/{paper_id}/citations` | Every citation, linked to its reference entry (2.1) |
 | `POST` | `/api/reader/papers/{paper_id}/references/resolve` | Identify each cited paper via Semantic Scholar (2.2); `?title_search=true` is slow |
 | `GET` | `/api/reader/papers/{paper_id}/references/resolved` | The cached resolution; never calls Semantic Scholar |
+| `POST` | `/api/reader/papers/{paper_id}/references/{reference_id}/text` | The cited paper's text (2.3): its PDF, parsed and openable as `cited_paper_id`; else its abstract; else `unavailable`, with the reasons |
 | `GET` | `/api/reader/coverage` | Which papers already have a path, per goal — what opens instantly |
 | `POST` | `/api/reader/papers/{paper_id}/reading-path?goal=skim` | Rank (cached; `&force=true` to re-rank) |
 | `GET` | `/api/reader/papers/{paper_id}/reading-path?goal=skim` | The cached path — never spends LLM quota |
@@ -76,6 +77,17 @@ curl -X POST localhost:8000/api/reader/papers/samples/attention-is-all-you-need.
 ```bash
 pytest
 ```
+
+## Cited-text fetch gate (Phase 2.3)
+
+```bash
+python scripts/qa_fetch.py              # first 5 references of each sample
+python scripts/qa_fetch.py --limit 20 --papers attention-is-all-you-need
+```
+
+Reports full text / abstract / unavailable, and groups why each attempt failed. Fetched
+papers go to `data/fetch-qa/` (gitignored), never the committed cache. A cold run is paced
+by arXiv (one request per 3s).
 
 ## Reference resolution gate (Phase 2.2)
 

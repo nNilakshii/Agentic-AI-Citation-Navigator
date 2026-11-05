@@ -422,6 +422,25 @@ is missing an ordinal or number is rejected — series papers differ by exactly 
 have an arXiv id, and every arXiv paper is free to read; 72% of references have a
 fetchable PDF this way. The rest are 2.3's abstract fallback.
 
+## Decided: a cited paper becomes an ordinary paper
+
+Settled at 2.3 (2026-11-04).
+
+A fetched PDF is parsed by the same pipeline as an upload and stored under its own
+content hash, so everything built for papers — rendering, reading paths, citation maps —
+works on the cited paper unchanged, and 2.11's side-by-side view just opens a second
+`paper_id`. Failures are never cached (the 1.6 lesson); successes are remembered by URL,
+so a PDF is downloaded once.
+
+**Coverage is reported, not hidden.** Each result says which rung it reached — full text,
+abstract, unavailable — and why each earlier rung failed. The localizer must handle all
+three: on the samples, roughly a quarter of cited papers have no full text we can get.
+
+**The downloader is a security boundary.** URLs come from third-party metadata and the
+server is public: http(s) only, no private/loopback/link-local addresses on any redirect
+hop, a 50 MB cap while streaming, a PDF signature check, and arXiv's 3-second pacing.
+Known gap: DNS rebinding between the check and the request.
+
 ## Open decisions
 
 - **GROBID adoption** — revisit at 2.1, where structured reference parsing is the task.

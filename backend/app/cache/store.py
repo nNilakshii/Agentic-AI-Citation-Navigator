@@ -6,6 +6,7 @@ Plain JSON files under ``data/cache/`` — no database until something forces on
 than overwriting one whose offsets other artifacts already point into.
 """
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -26,6 +27,7 @@ class PaperStore:
         self.parsed_dir = self.root / "parsed"
         self.paths_dir = self.root / "reading_paths"
         self.resolutions_dir = self.root / "resolutions"
+        self.fetched_dir = self.root / "fetched"
 
     # --- paths ---------------------------------------------------------
 
@@ -108,6 +110,14 @@ class PaperStore:
         except (ValueError, OSError):
             return None
 
+    def load_fetched(self, url: str) -> str | None:
+        """The paper id a cited-paper URL was fetched and parsed as, if it was."""
+        path = self._fetched_path(url)
+        try:
+            return json.loads(path.read_text(encoding="utf-8")).get("paper_id")
+        except (OSError, ValueError):
+            return None
+
     def list_parsed(self, parser_version: str) -> list[ParsedPaper]:
         """Every paper parsed at this parser version, newest write first."""
         if not self.parsed_dir.exists():
@@ -165,6 +175,17 @@ class PaperStore:
         payload = json.dumps(resolution.model_dump(mode="json"), ensure_ascii=False)
         self._write_atomic(path, payload.encode("utf-8"))
         return path
+
+    def save_fetched(self, url: str, paper_id: str) -> Path:
+        """Remember a successful fetch, so the PDF is never downloaded twice."""
+        path = self._fetched_path(url)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = json.dumps({"url": url, "paper_id": paper_id})
+        self._write_atomic(path, payload.encode("utf-8"))
+        return path
+
+    def _fetched_path(self, url: str) -> Path:
+        return self.fetched_dir / f"{hashlib.sha256(url.encode()).hexdigest()}.json"
 
     @staticmethod
     def _write_atomic(path: Path, data: bytes) -> None:

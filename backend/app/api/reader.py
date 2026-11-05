@@ -16,14 +16,17 @@ from app.cache import PaperStore
 from app.core.citations import CITATION_VERSION, build_citation_map
 from app.core.goals import GOAL_SPECS
 from app.core.pdf_parser import PARSER_VERSION, paper_id_for, parse_pdf
+from app.core.cited_text import fetch_cited_text
 from app.core.reading_path import RANKER_VERSION, build_reading_path
 from app.core.resolution import RESOLVER_VERSION, resolve_references
 from app.llm.client import LLMClient, LLMError, LLMNotConfigured, get_llm_client
 from app.models.citation import CitationMap
+from app.models.cited import CitedText
 from app.models.paper import ParsedPaper, PaperSummary, Section
 from app.models.reading import ReadingGoal, ReadingPath
 from app.models.resolution import ResolutionMap
 from app.scholar.client import SemanticScholar, get_scholar
+from app.scholar.download import Downloader, get_downloader
 
 router = APIRouter()
 
@@ -211,6 +214,41 @@ def get_resolution(
             detail=f"no resolution for {paper_id}; POST .../references/resolve first",
         )
     return cached
+
+
+@router.post(
+    "/papers/{paper_id}/references/{reference_id}/text",
+    response_model=CitedText,
+    summary="Fetch a cited paper's text: PDF, else abstract, else say so (task 2.3)",
+)
+def cited_text(
+    paper_id: str,
+    reference_id: str,
+    store: PaperStore = Depends(get_store),
+    scholar: SemanticScholar = Depends(get_scholar),
+    downloader: Downloader = Depends(get_downloader),
+) -> CitedText:
+    """Get the text of the work one reference points at.
+
+    A fetched PDF is parsed and stored as an ordinary paper, so its
+    ``cited_paper_id`` opens in the reader like any other. Resolves the citing
+    paper's references first if that has not been done.
+    """
+    paper = _load_or_404(paper_id, store)
+    key = (paper_id, PARSER_VERSION, CITATION_VERSION, RESOLVER_VERSION)
+    resolution = store.load_resolution(*key)
+    if resolution is None:
+        resolution = resolve_references(paper, build_citation_map(paper), scholar)
+        if resolution.complete:
+            store.save_resolution(resolution)
+    try:
+        return fetch_cited_text(
+            paper, reference_id, resolution, store, scholar, downloader
+        )
+    except KeyError as error:
+        raise HTTPException(
+            status_code=404, detail=f"no reference {reference_id} in {paper_id}"
+        ) from error
 
 
 @router.get("/papers/{paper_id}/pdf", summary="Get the original PDF bytes")
