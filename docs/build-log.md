@@ -443,7 +443,7 @@ email, which the 0.3 setup relied on, no longer raises any limit. The client hon
 
 **Result:** 59/80 full text (74%), 9 abstract, 12 unavailable; **90.7% of resolved
 references have some text** (was 81%). The rest: paywalls (ACM, Elsevier, Wiley), workshop
-papers, and 2 searches throttled for want of a key.
+papers, and 2 searches throttled for want of a key. With a key: **93.3%**, 60/80 full text.
 
 
 
