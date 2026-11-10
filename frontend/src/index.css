@@ -496,8 +496,15 @@ button:disabled {
   background: rgb(37 99 235 / 22%);
 }
 
-.highlight--cited {
-  background: rgb(56 189 248 / 45%);
+/* Where a citation points (2.12): its own colour, so it never reads as part
+   of the reading path. Every cited highlight is "focused", so the focus rule
+   is overridden to keep it green rather than the reading path's blue. */
+.highlight--cited,
+.highlight--cited.highlight--focus {
+  background: rgb(16 185 129 / 28%);
+  outline: 2px solid rgb(5 150 105 / 60%);
+  outline-offset: 1px;
+  mix-blend-mode: multiply;
 }
 
 /* --- reading path status (1.7) -------------------------------------- */
@@ -864,4 +871,99 @@ button:disabled {
   margin: 0.4rem 0 0;
   padding-left: 1.1rem;
   overflow-wrap: anywhere;
+}
+
+
+/* --- candidate passages (2.12) ------------------------------------- */
+
+.candidates {
+  max-height: 38%;
+  overflow-y: auto;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+
+.candidates__lead {
+  margin: 0 0 0.45rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.candidates__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.candidate {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  text-align: left;
+}
+
+.candidate:hover {
+  background: var(--page-bg);
+}
+
+.candidate--chosen {
+  border-color: rgb(5 150 105 / 70%);
+  background: rgb(16 185 129 / 8%);
+}
+
+.candidate__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.candidate__badge {
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: rgb(16 185 129 / 16%);
+  color: #047857;
+  font-weight: 600;
+}
+
+.candidate__section {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.candidate__text {
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.candidates__none {
+  margin-top: 0.45rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.candidates__none[aria-pressed="true"] {
+  border-color: var(--text);
+  color: var(--text);
+}
+
+.cited__mark {
+  background: rgb(16 185 129 / 28%);
+  border-radius: 2px;
+  padding: 0 1px;
 }

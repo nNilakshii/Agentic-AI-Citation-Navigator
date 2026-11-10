@@ -185,3 +185,17 @@ export function fetchCitedText(paperId, referenceId) {
     { method: "POST" },
   );
 }
+
+/**
+ * Rank the cited work's passages for one citation (2.5, 2.7).
+ *
+ * The answer carries `results` (ranked passages with their sentence ids),
+ * `clear_match` (the top one clearly leads), and `source` (full text or only
+ * the abstract was searched). A 503 means this server has no embedding model.
+ */
+export function localizeCitation(paperId, anchorId, k = 5) {
+  return request(
+    `${BASE}/papers/${paperId}/citations/${encodeURIComponent(anchorId)}/localize?k=${k}`,
+    { method: "POST" },
+  );
+}

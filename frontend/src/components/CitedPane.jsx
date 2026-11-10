@@ -5,11 +5,24 @@
  * second viewer; only the abstract, as text; or nothing, with the reasons.
  * "Not available" is an answer to show plainly, never a blank pane.
  *
- * Jumping to the cited passage inside the PDF is 2.12.
+ * Where the citation points inside it (2.12) comes from the localizer: the
+ * chosen passage is highlighted and scrolled to, and the other candidates are
+ * listed, so the reader can correct a wrong guess or say "none of these". The
+ * top answer is called a likely match only when the localizer says it clearly
+ * leads (2.7): even then it is right about a third of the time, so it is never
+ * presented as certain.
  */
+
+import { useMemo } from "react";
 
 import PdfViewer from "./PdfViewer.jsx";
 import { anchorLabel } from "../lib/citations.js";
+import {
+  excerpt,
+  passageSentences,
+  scrollTarget,
+  splitAbstract,
+} from "../lib/localization.js";
 
 function hostOf(url) {
   try {
@@ -19,8 +32,19 @@ function hostOf(url) {
   }
 }
 
-export default function CitedPane({ bridge, pdfUrl, onClose, onPick }) {
-  const { group, index, status, cited, error } = bridge;
+export default function CitedPane({ bridge, pdfUrl, onClose, onPick, onChoose }) {
+  const { group, index, status, cited, error, loc } = bridge;
+  const results = loc?.status === "ready" ? loc.result.results : [];
+  const chosenPassage =
+    loc?.status === "ready" && loc.chosen !== null ? results[loc.chosen]?.passage : null;
+
+  // Recomputed only when the choice changes: a new scroll request each render
+  // would keep yanking the reader back to the passage.
+  const highlight = useMemo(
+    () => passageSentences(loc?.citedPaper, chosenPassage),
+    [loc?.citedPaper, chosenPassage],
+  );
+  const scrollTo = useMemo(() => scrollTarget(highlight), [highlight]);
   const anchor = group.anchors[index];
   const title = cited?.title ?? `Cited work ${anchorLabel(anchor)}`;
 
@@ -76,7 +100,13 @@ export default function CitedPane({ bridge, pdfUrl, onClose, onPick }) {
             Full text
             {hostOf(cited.fetched_from) && <> from {hostOf(cited.fetched_from)}</>}
           </p>
-          <PdfViewer fileUrl={pdfUrl(cited.cited_paper_id)} />
+          <Candidates loc={loc} results={results} onChoose={onChoose} />
+          <PdfViewer
+            fileUrl={pdfUrl(cited.cited_paper_id)}
+            highlightSentences={highlight}
+            highlightVariant="cited"
+            scrollToPage={scrollTo}
+          />
         </>
       )}
 
@@ -86,7 +116,8 @@ export default function CitedPane({ bridge, pdfUrl, onClose, onPick }) {
             Only the abstract is available for this paper
             {cited.abstract_from === "openalex" ? " (via OpenAlex)" : ""}.
           </p>
-          <p className="cited__abstract">{cited.abstract}</p>
+          <Candidates loc={loc} results={results} onChoose={onChoose} />
+          <Abstract text={cited.abstract} passage={chosenPassage} />
           <Reasons attempts={cited.attempts} summary="Why not the full text" />
         </div>
       )}
@@ -114,5 +145,85 @@ function Reasons({ attempts, summary, open = false }) {
         ))}
       </ul>
     </details>
+  );
+}
+
+function Candidates({ loc, results, onChoose }) {
+  if (!loc) return null;
+  if (loc.status === "loading") {
+    return (
+      <p className="cited__status" role="status">
+        Looking for the passage this citation points to…
+      </p>
+    );
+  }
+  if (loc.status === "error") {
+    const notHere = loc.error?.status === 503;
+    return (
+      <p className="cited__status">
+        {notHere
+          ? "Finding the cited passage is not available on this server, so the paper opens at the start."
+          : `Could not find the cited passage: ${loc.error?.message ?? "unknown error"}`}
+      </p>
+    );
+  }
+  if (!results.length) {
+    return <p className="cited__status">No candidate passages in this paper.</p>;
+  }
+
+  const clear = loc.result.clear_match;
+  return (
+    <section className="candidates" aria-label="Where this citation points">
+      <p className="candidates__lead">
+        {clear
+          ? "Likely the passage this citation points to — check it, or pick another."
+          : "Best guesses for the passage this citation points to, most likely first."}
+        {loc.result.source === "abstract" && " Only the abstract could be searched."}
+      </p>
+      <ol className="candidates__list">
+        {results.map((r, i) => {
+          const chosen = loc.chosen === i;
+          return (
+            <li key={r.passage.id}>
+              <button
+                type="button"
+                className={`candidate${chosen ? " candidate--chosen" : ""}`}
+                aria-pressed={chosen}
+                onClick={() => onChoose(i)}
+              >
+                <span className="candidate__meta">
+                  {i === 0 && clear && <span className="candidate__badge">Likely match</span>}
+                  <span>{i + 1}.</span>
+                  {r.passage.section_title && (
+                    <span className="candidate__section">{r.passage.section_title}</span>
+                  )}
+                </span>
+                <span className="candidate__text">{excerpt(r.passage.text)}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+      <button
+        type="button"
+        className="candidates__none"
+        aria-pressed={loc.chosen === null}
+        onClick={() => onChoose(null)}
+      >
+        None of these
+      </button>
+    </section>
+  );
+}
+
+function Abstract({ text, passage }) {
+  const parts = splitAbstract(text, passage);
+  if (!parts) return <p className="cited__abstract">{text}</p>;
+  return (
+    <p className="cited__abstract">
+      {parts.before}
+      <mark className="cited__mark">{parts.match}</mark>
+      {parts.after}
+    </p>
   );
 }

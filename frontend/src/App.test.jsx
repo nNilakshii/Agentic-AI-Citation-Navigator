@@ -16,6 +16,9 @@ vi.mock("./components/PdfViewer.jsx", () => ({
       data-testid="pdf-viewer-stub"
       data-file-url={props.fileUrl ?? ""}
       data-scroll-page={props.scrollToPage?.page ?? ""}
+      data-scroll-y={props.scrollToPage?.y ?? ""}
+      data-variant={props.highlightVariant ?? ""}
+      data-highlight-ids={(props.highlightSentences ?? []).map((s) => s.id).join(",")}
       data-highlight-count={props.highlightSentences?.length ?? 0}
     >
       {/* Lets a test drive the scroll tracking the real viewer reports. */}
@@ -61,6 +64,31 @@ const citationMap = {
     anchor("c0003", "9", null, 300),
   ],
 };
+const passage = (id, ids, text, start, section = "3 Model") => ({
+  id,
+  text,
+  start_char: start,
+  end_char: start + text.length,
+  sentence_ids: ids,
+  section_title: section,
+});
+const localization = {
+  anchor_id: "c0000",
+  source: "full-text",
+  clear_match: true,
+  results: [
+    { rank: 1, score: 2.4, passage: passage("p0040", ["s00040"], "We align and translate jointly.", 900) },
+    { rank: 2, score: 1.1, passage: passage("p0012", ["s00012"], "Encoders compress the source sentence.", 300, "1 Introduction") },
+  ],
+  notes: [],
+};
+const citedPaper = {
+  paper_id: "c".repeat(64),
+  sentences: [
+    { id: "s00012", text: "Encoders compress the source sentence.", page: 0, bboxes: [{ page: 0, x0: 1, y0: 100, x1: 9, y1: 110 }] },
+    { id: "s00040", text: "We align and translate jointly.", page: 2, bboxes: [{ page: 2, x0: 1, y0: 400, x1: 9, y1: 410 }] },
+  ],
+};
 const fullTextCited = {
   citing_paper_id: "x",
   reference_id: "r007",
@@ -81,6 +109,8 @@ beforeEach(() => {
   api.fetchStatus.mockResolvedValue({ status: "ok", rankings_left_today: 15 });
   api.fetchCitations.mockResolvedValue({ anchors: [] });
   api.fetchCitedText.mockResolvedValue(fullTextCited);
+  api.localizeCitation.mockResolvedValue(localization);
+  api.getPaper.mockResolvedValue(citedPaper);
   api.fetchCoverage.mockResolvedValue([
     { filename: "attention-is-all-you-need.pdf", paper_id: paper.paper_id, ready: ["skim"] },
     { filename: "bert.pdf", paper_id: "b".repeat(64), ready: [] },
@@ -874,5 +904,108 @@ describe("opening a cited work (2.11)", () => {
     await openSamplePaper();
     expect(screen.getByTestId("pdf-viewer-stub")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^cite / })).toBeNull();
+  });
+});
+
+
+describe("landing on the cited passage (2.12)", () => {
+  beforeEach(() => {
+    api.fetchCitations.mockResolvedValue(citationMap);
+  });
+
+  async function openCitation() {
+    await openSamplePaper();
+    await userEvent.click(await screen.findByRole("button", { name: "cite 7" }));
+    return screen.findByRole("region", { name: "Where this citation points" });
+  }
+
+  const citedViewer = () =>
+    screen
+      .getAllByTestId("pdf-viewer-stub")
+      .find((v) => v.dataset.fileUrl.includes("c".repeat(64)));
+
+  it("highlights the top passage and scrolls to it", async () => {
+    await openCitation();
+    expect(api.localizeCitation).toHaveBeenCalledWith(paper.paper_id, "c0000");
+    expect(api.getPaper).toHaveBeenCalledWith("c".repeat(64));
+    await waitFor(() => expect(citedViewer().dataset.highlightIds).toBe("s00040"));
+    expect(citedViewer().dataset.scrollPage).toBe("2");
+    expect(citedViewer().dataset.scrollY).toBe("400");
+    expect(citedViewer().dataset.variant).toBe("cited");
+  });
+
+  it("calls the top answer likely only when it clearly leads", async () => {
+    const list = await openCitation();
+    expect(within(list).getByText("Likely match")).toBeInTheDocument();
+  });
+
+  it("calls them best guesses when nothing clearly leads", async () => {
+    api.localizeCitation.mockResolvedValue({ ...localization, clear_match: false });
+    const list = await openCitation();
+    expect(within(list).queryByText("Likely match")).toBeNull();
+    expect(within(list).getByText(/Best guesses/)).toBeInTheDocument();
+  });
+
+  it("lets the reader pick another candidate", async () => {
+    const list = await openCitation();
+    await userEvent.click(within(list).getByRole("button", { name: /Encoders compress/ }));
+    await waitFor(() => expect(citedViewer().dataset.highlightIds).toBe("s00012"));
+    expect(citedViewer().dataset.scrollPage).toBe("0");
+  });
+
+  it("lets the reader say none of these", async () => {
+    const list = await openCitation();
+    await userEvent.click(within(list).getByRole("button", { name: "None of these" }));
+    await waitFor(() => expect(citedViewer().dataset.highlightIds).toBe(""));
+    expect(within(list).getByRole("button", { name: "None of these" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("still opens the paper where passage finding is not installed", async () => {
+    const unavailable = Object.assign(new Error("not installed"), { status: 503 });
+    api.localizeCitation.mockRejectedValue(unavailable);
+    await openSamplePaper();
+    await userEvent.click(await screen.findByRole("button", { name: "cite 7" }));
+    expect(await screen.findByText(/not available on this server/)).toBeInTheDocument();
+    expect(citedViewer()).toBeInTheDocument();
+  });
+
+  it("survives a malformed ranking", async () => {
+    api.localizeCitation.mockResolvedValue({});
+    await openSamplePaper();
+    await userEvent.click(await screen.findByRole("button", { name: "cite 7" }));
+    expect(await screen.findByText(/came back incomplete/)).toBeInTheDocument();
+    expect(citedViewer()).toBeInTheDocument();
+  });
+
+  it("marks the passage inside an abstract", async () => {
+    const abstract = "We study translation. We align and translate jointly. It works.";
+    api.fetchCitedText.mockResolvedValue({
+      ...fullTextCited,
+      source: "abstract",
+      cited_paper_id: null,
+      abstract,
+    });
+    const start = abstract.indexOf("We align");
+    api.localizeCitation.mockResolvedValue({
+      ...localization,
+      source: "abstract",
+      results: [{ rank: 1, score: 2, passage: passage("p0001", [], "We align and translate jointly.", start, "Abstract") }],
+    });
+    await openSamplePaper();
+    await userEvent.click(await screen.findByRole("button", { name: "cite 7" }));
+    const mark = await screen.findByText("We align and translate jointly.", { selector: "mark" });
+    expect(mark).toBeInTheDocument();
+    expect(api.getPaper).not.toHaveBeenCalled();
+  });
+
+  it("does not look for a passage in a paper that could not be found", async () => {
+    api.fetchCitedText.mockResolvedValue({ ...fullTextCited, source: "unavailable", cited_paper_id: null });
+    await openSamplePaper();
+    await userEvent.click(await screen.findByRole("button", { name: "cite 7" }));
+    await screen.findByText(/could not be found/);
+    expect(api.localizeCitation).not.toHaveBeenCalled();
   });
 });

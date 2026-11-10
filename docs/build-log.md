@@ -594,6 +594,33 @@ and a test confirms that removing the guard shows the stale paper.
 **Result:** click a citation, see the cited work beside the paper — its PDF, its abstract
 with the reason the PDF was missing, or what was tried.
 
+## Task 2.12 — landing on the cited passage
+
+### Three ways the jump could have quietly failed
+
+- **An effect that cancelled itself.** Fetching the ranking set a "loading" field that the
+  same effect depended on, so it re-ran, cancelled its own request and threw the answer
+  away — every time. Caught reading the code before the first run; the effect now depends
+  on the cited answer, which it never changes.
+- **Scrolling into a moving layout.** pdf.js gives a page its height only once it renders,
+  so a scroll aimed at a passage on page 12 of a just-opened paper would land wherever the
+  unsized placeholders put it. Every placeholder is now sized from page 1's aspect ratio
+  before it renders.
+- **Re-applying old scrolls.** The first version re-ran the scroll whenever the viewer's
+  width changed — and opening the cited pane changes the citing viewer's width, which would
+  have yanked the reader back to their last outline jump. Each scroll request now applies
+  once.
+
+### Honest about how sure it is
+
+2.7 measured that the top passage is right 23% of the time, and 36% when it clearly leads.
+So the pane lists the candidates, calls the first a "Likely match" only when `clear_match`
+is set, and lets the reader pick another or say "none of these". A malformed ranking costs
+the ranking, not the open paper (found when a test fixture returned nothing).
+
+**Result:** click a citation, the cited paper opens beside it, highlighted and scrolled to
+the best candidate, with the alternatives one click away.
+
 
 
 1. **Unit tests caught the logic; only a live run caught the damage.** Every bug in B and C

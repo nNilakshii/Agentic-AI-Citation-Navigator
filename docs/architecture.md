@@ -520,8 +520,11 @@ only, so the layout is rebuilt from the stored PDF — deterministic, so the sam
 the same offsets — and markers are placed by `bboxes_for_span`, the function behind every
 other highlight. A text mismatch returns no rectangles, never wrong ones. The cited work
 opens in a pane beside the citing paper and replaces the reading-path panel while open; it
-shows the PDF, the abstract, or the reasons neither was found. Jumping to the passage is
-2.12.
+shows the PDF, the abstract, or the reasons neither was found. In 2.12 the pane also
+asks the localizer where the citation points, highlights the chosen candidate in the cited
+PDF (or marks it in an abstract), scrolls to it, and lists the alternatives — "Likely match"
+only when `clear_match` is set — with "None of these" as the manual fallback. Page
+placeholders are sized before they render so a scroll to a passage lands where aimed.
 
 ## Open decisions
 

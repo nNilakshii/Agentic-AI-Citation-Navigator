@@ -11,7 +11,9 @@
  *
  * Citations in the PDF are clickable (2.11): clicking one fetches the cited
  * work and opens it beside the citing paper, in place of the reading-path
- * panel, until it is closed.
+ * panel, until it is closed. The pane then asks where in the cited work the
+ * citation points (2.12): the best passage is highlighted and scrolled to,
+ * with the other candidates listed so the reader can correct it.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -63,7 +65,8 @@ export default function App() {
   const [budgetLeft, setBudgetLeft] = useState(null);
   const jumpedAt = useRef(0);
   const [citationGroups, setCitationGroups] = useState([]);
-  // The open cited work: {group, index, status, cited, error}, or null.
+  // The open cited work: {group, index, status, cited, error, loc}, or null.
+  // `loc` is the ranking: {status, result, citedPaper, chosen, error}.
   const [bridge, setBridge] = useState(null);
 
   const connect = useCallback(async () => {
@@ -208,6 +211,55 @@ export default function App() {
     };
   }, [paper, openAnchorId, bridge?.status]);
 
+  // Once the cited work is in, ask where the citation points within it, and —
+  // for a PDF — fetch its parse, which holds the sentences' rectangles.
+  //
+  // Keyed on the cited answer itself, not on whether a ranking exists yet:
+  // this effect sets `loc`, and a dependency it changes would cancel it.
+  const openCitedAnswer = bridge?.status === "ready" ? bridge.cited : null;
+  useEffect(() => {
+    if (!paper || !openCitedAnswer || bridge.loc) return undefined;
+    const anchor = bridge.group.anchors[bridge.index];
+    const { cited } = bridge;
+    if (cited.source === "unavailable") return undefined;
+    let current = true;
+    setBridge((b) => b && { ...b, loc: { status: "loading" } });
+    Promise.all([
+      api.localizeCitation(paper.paper_id, anchor.id),
+      cited.source === "full-text" ? api.getPaper(cited.cited_paper_id) : null,
+    ])
+      .then(([result, citedPaper]) => {
+        if (!current) return;
+        // A malformed answer must cost the ranking, not the open paper.
+        if (!Array.isArray(result?.results)) {
+          throw new Error("the passage ranking came back incomplete");
+        }
+        setBridge(
+          (b) =>
+            b && {
+              ...b,
+              loc: {
+                status: "ready",
+                result,
+                citedPaper,
+                chosen: result.results.length ? 0 : null,
+              },
+            },
+        );
+      })
+      .catch((cause) => {
+        if (!current) return;
+        setBridge((b) => b && { ...b, loc: { status: "error", error: cause } });
+      });
+    return () => {
+      current = false;
+    };
+  }, [paper, openAnchorId, openCitedAnswer]);
+
+  const chooseCandidate = useCallback((chosen) => {
+    setBridge((b) => b?.loc && { ...b, loc: { ...b.loc, chosen } });
+  }, []);
+
   const handleSelectSection = useCallback((section) => {
     setSelectedSection(section);
     setActiveSectionId(section.id);
@@ -340,6 +392,7 @@ export default function App() {
           pdfUrl={api.pdfUrl}
           onClose={() => setBridge(null)}
           onPick={(index) => openCited(bridge.group, index)}
+          onChoose={chooseCandidate}
         />
       ) : (
         <ExplanationPanel

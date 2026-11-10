@@ -28,6 +28,9 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 /** Horizontal padding to leave around the page, in pixels. */
 const GUTTER = 32;
 
+/** Room left above a scrolled-to passage, in pixels, so it is not flush. */
+const SCROLL_MARGIN = 72;
+
 export default function PdfViewer({
   fileUrl,
   highlightSentences,
@@ -36,12 +39,14 @@ export default function PdfViewer({
   citationGroups,
   activeCitationKey,
   onCitationClick,
+  highlightVariant = "path",
 }) {
   const containerRef = useRef(null);
   const pageRefs = useRef(new Map());
   const [pageCount, setPageCount] = useState(0);
   const [width, setWidth] = useState(0);
   const [originalWidth, setOriginalWidth] = useState(0);
+  const [originalHeight, setOriginalHeight] = useState(0);
   const [error, setError] = useState(null);
 
   // Track the container width so pages re-render at the right size on resize.
@@ -64,17 +69,48 @@ export default function PdfViewer({
     // Page 1's natural width defines the scale for the whole document; papers
     // are uniform, and a mixed-size document would only mis-scale the outliers.
     const firstPage = await pdf.getPage(1);
-    setOriginalWidth(firstPage.getViewport({ scale: 1 }).width);
+    const viewport = firstPage.getViewport({ scale: 1 });
+    setOriginalWidth(viewport.width);
+    // Page 1's height too: every page placeholder is sized before it renders,
+    // so the layout does not shift as pages arrive and a scroll to a passage
+    // deep in the paper lands where it was aimed (2.12).
+    setOriginalHeight(viewport.height);
   }, []);
 
   // Scroll the requested page into view when the outline is clicked. Keyed on
   // the request object, not the page number, so clicking the same section twice
-  // scrolls back to it rather than doing nothing.
+  // scrolls back to it rather than doing nothing. A request with `y` (PDF
+  // points from the page top) scrolls to that spot on the page — a passage
+  // rather than its page (2.12).
+  //
+  // Each request is applied once. One made before the PDF is sized waits for
+  // it; after that, a resize (the cited pane opening beside this viewer) must
+  // not drag the reader back to a place they have since scrolled away from.
+  const appliedScroll = useRef(null);
   useEffect(() => {
-    if (!scrollToPage) return;
+    if (!scrollToPage || appliedScroll.current === scrollToPage) return;
     const node = pageRefs.current.get(scrollToPage.page);
-    node?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [scrollToPage]);
+    const container = containerRef.current;
+    if (scrollToPage.y === undefined || !container?.scrollTo) {
+      if (!node) return;
+      node.scrollIntoView({ behavior: "smooth", block: "start" });
+      appliedScroll.current = scrollToPage;
+      return;
+    }
+    if (!node || !width || !originalWidth) return; // not sized yet: wait
+    const pageTop =
+      container.scrollTop +
+      node.getBoundingClientRect().top -
+      container.getBoundingClientRect().top;
+    container.scrollTo({
+      top: Math.max(
+        0,
+        pageTop + scrollToPage.y * scaleFor(width, originalWidth) - SCROLL_MARGIN,
+      ),
+      behavior: "smooth",
+    });
+    appliedScroll.current = scrollToPage;
+  }, [scrollToPage, pageCount, width, originalWidth]);
 
   // Report which page is in view, so the outline can show where the reader is.
   useEffect(() => {
@@ -119,6 +155,11 @@ export default function PdfViewer({
         {Array.from({ length: pageCount }, (_, index) => (
           <div
             className="viewer__page"
+            style={
+              originalHeight && scale
+                ? { minHeight: `${Math.round(originalHeight * scale)}px` }
+                : undefined
+            }
             key={index}
             data-page-index={index}
             data-testid={`page-${index}`}
@@ -135,6 +176,7 @@ export default function PdfViewer({
             <HighlightLayer
               bboxes={bboxesOnPage(highlightSentences, index)}
               scale={scale}
+              variant={highlightVariant}
             />
             <CitationLayer
               targets={targetsOnPage(citationGroups, index)}
