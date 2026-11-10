@@ -15,6 +15,7 @@ from app.api.limits import check_rank_budget
 from app.cache import PaperStore
 from app.core.citations import CITATION_VERSION, build_citation_map
 from app.core.goals import GOAL_SPECS
+from app.core.highlights import locate_spans
 from app.core.pdf_parser import PARSER_VERSION, paper_id_for, parse_pdf
 from app.core.cited_text import fetch_cited_text
 from app.core.embedding import CACHE_DIR as EMBEDDING_CACHE
@@ -160,7 +161,31 @@ def get_citations(paper_id: str, store: PaperStore = Depends(get_store)) -> Cita
     text processing, a few milliseconds per paper, and a separate artifact
     from the parse so that changing it never invalidates cached rankings.
     """
-    return build_citation_map(_load_or_404(paper_id, store))
+    paper = _load_or_404(paper_id, store)
+    citations = build_citation_map(paper)
+    boxes = _anchor_boxes(paper, citations, store)
+    for anchor, rects in zip(citations.anchors, boxes or []):
+        anchor.bboxes = rects
+    return citations
+
+
+#: Anchor rectangles per (paper, parser, citation detector): rebuilding a
+#: paper's layout takes ~0.5s, and the answer never changes.
+_ANCHOR_BOXES: dict[tuple[str, str, str], list] = {}
+_ANCHOR_BOXES_MAX = 64
+
+
+def _anchor_boxes(paper: ParsedPaper, citations: CitationMap, store: PaperStore):
+    key = (paper.paper_id, paper.parser_version, CITATION_VERSION)
+    if key not in _ANCHOR_BOXES:
+        pdf = store.load_pdf(paper.paper_id)
+        if pdf is None:
+            return None
+        spans = [(a.start_char, a.end_char) for a in citations.anchors]
+        if len(_ANCHOR_BOXES) >= _ANCHOR_BOXES_MAX:
+            _ANCHOR_BOXES.pop(next(iter(_ANCHOR_BOXES)))
+        _ANCHOR_BOXES[key] = locate_spans(pdf, paper.full_text, spans) or []
+    return _ANCHOR_BOXES[key]
 
 
 @router.get(

@@ -8,11 +8,16 @@
  * path by the backend (1.6) and drawn over the pages here (1.7). Changing the
  * goal re-fetches; the backend caches per goal, so switching back is instant.
  * The right-hand panel lists that path with plain-language explanations (1.8).
+ *
+ * Citations in the PDF are clickable (2.11): clicking one fetches the cited
+ * work and opens it beside the citing paper, in place of the reading-path
+ * panel, until it is closed.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import BudgetNotice from "./components/BudgetNotice.jsx";
+import CitedPane from "./components/CitedPane.jsx";
 import ConnectionBanner from "./components/ConnectionBanner.jsx";
 import ExplanationPanel from "./components/ExplanationPanel.jsx";
 import GoalModal from "./components/GoalModal.jsx";
@@ -22,6 +27,7 @@ import PaperPicker from "./components/PaperPicker.jsx";
 import PdfViewer from "./components/PdfViewer.jsx";
 import ReadingPathStatus from "./components/ReadingPathStatus.jsx";
 import * as api from "./lib/api.js";
+import { groupAnchors } from "./lib/citations.js";
 import { DEFAULT_GOAL_ID, goalById } from "./lib/goals.js";
 import { paperSubtitle, sectionAt } from "./lib/outline.js";
 import { pathSentences } from "./lib/readingPath.js";
@@ -56,6 +62,9 @@ export default function App() {
   const [coverage, setCoverage] = useState(null);
   const [budgetLeft, setBudgetLeft] = useState(null);
   const jumpedAt = useRef(0);
+  const [citationGroups, setCitationGroups] = useState([]);
+  // The open cited work: {group, index, status, cited, error}, or null.
+  const [bridge, setBridge] = useState(null);
 
   const connect = useCallback(async () => {
     const status = await api.fetchStatus();
@@ -100,6 +109,8 @@ export default function App() {
       setSelectedSection(null);
       setActiveSectionId(parsed.sections?.[0]?.id ?? null);
       setScrollToPage({ page: 0 });
+      setCitationGroups([]);
+      setBridge(null);
       // A new paper is a new reading session, so the goal is asked again
       // rather than inherited silently from the last one.
       setAskingGoal(true);
@@ -157,6 +168,46 @@ export default function App() {
     };
   }, [paper, goalId, askingGoal, pathAttempt]);
 
+  // Citations are a convenience on top of reading: if they cannot be loaded,
+  // the paper simply has no clickable markers.
+  useEffect(() => {
+    if (!paper) return undefined;
+    let current = true;
+    api
+      .fetchCitations(paper.paper_id)
+      .then((map) => current && setCitationGroups(groupAnchors(map.anchors)))
+      .catch(() => current && setCitationGroups([]));
+    return () => {
+      current = false;
+    };
+  }, [paper]);
+
+  const openCited = useCallback((group, index = 0) => {
+    setBridge({ group, index, status: "loading", cited: null, error: null });
+  }, []);
+
+  // Fetch whichever cited work is open. Keyed on the anchor, so clicking a
+  // second citation before the first answers can never show the first's text.
+  const openAnchorId = bridge?.group.anchors[bridge.index]?.id;
+  useEffect(() => {
+    if (!paper || !bridge || bridge.status !== "loading") return undefined;
+    const anchor = bridge.group.anchors[bridge.index];
+    let current = true;
+    api
+      .fetchCitedText(paper.paper_id, anchor.reference_id)
+      .then((cited) => {
+        if (current) setBridge((b) => b && { ...b, status: "ready", cited });
+      })
+      .catch((cause) => {
+        if (current) {
+          setBridge((b) => b && { ...b, status: "error", error: cause.message });
+        }
+      });
+    return () => {
+      current = false;
+    };
+  }, [paper, openAnchorId, bridge?.status]);
+
   const handleSelectSection = useCallback((section) => {
     setSelectedSection(section);
     setActiveSectionId(section.id);
@@ -207,7 +258,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="app">
+    <div className={`app${bridge ? " app--bridge" : ""}`}>
       <aside className="sidebar">
         <header className="sidebar__header">
           <h1>AURA</h1>
@@ -277,15 +328,27 @@ export default function App() {
           highlightSentences={highlightSentences}
           scrollToPage={scrollToPage}
           onPageChange={handlePageChange}
+          citationGroups={citationGroups}
+          activeCitationKey={bridge?.group.key}
+          onCitationClick={openCited}
         />
       </main>
 
-      <ExplanationPanel
-        items={highlightSentences}
-        activeId={activePathId}
-        onSelect={handleSelectPathItem}
-        goalLabel={goalById(goalId).label.toLowerCase()}
-      />
+      {bridge ? (
+        <CitedPane
+          bridge={bridge}
+          pdfUrl={api.pdfUrl}
+          onClose={() => setBridge(null)}
+          onPick={(index) => openCited(bridge.group, index)}
+        />
+      ) : (
+        <ExplanationPanel
+          items={highlightSentences}
+          activeId={activePathId}
+          onSelect={handleSelectPathItem}
+          goalLabel={goalById(goalId).label.toLowerCase()}
+        />
+      )}
 
       {askingGoal && paper && (
         <GoalModal

@@ -16,6 +16,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
+from app.models.paper import BBox
+
 
 class CitationStyle(str, Enum):
     """How a paper cites. Decided from its reference list, not its body text."""
@@ -61,6 +63,11 @@ class CitationAnchor(BaseModel):
     reference_id: str | None = Field(
         default=None,
         description="The entry this cites; None when no entry could be matched.",
+    )
+    bboxes: list[BBox] = Field(
+        default_factory=list,
+        description="Where the marker sits on the page, so the reader can make it "
+        "clickable (2.11). Empty when the PDF is not at hand.",
     )
 
 

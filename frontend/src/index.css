@@ -698,3 +698,170 @@ button:disabled {
   font-style: normal;
   font-weight: 600;
 }
+
+/* --- citations (2.11) ---------------------------------------------- */
+
+/* Click-through everywhere except on the markers, so the PDF text around
+   them stays selectable. Above the highlight layer, which takes no clicks. */
+.citation-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.citation-hit {
+  position: absolute;
+  pointer-events: auto;
+  padding: 0;
+  border: none;
+  border-bottom: 2px solid rgb(37 99 235 / 35%);
+  border-radius: 2px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.citation-hit:hover,
+.citation-hit:focus-visible {
+  background: rgb(37 99 235 / 14%);
+  border-bottom-color: var(--accent);
+  outline: none;
+}
+
+.citation-hit--active {
+  background: rgb(37 99 235 / 22%);
+  border-bottom-color: var(--accent);
+}
+
+/* --- the cited work, beside the citing paper ----------------------- */
+
+/* Open: citing paper and cited work share the width evenly. */
+.app--bridge .reader,
+.cited {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.cited {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--border);
+  background: #fff;
+}
+
+.cited__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.cited__kicker {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.cited__title {
+  margin: 0.2rem 0 0;
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.cited__close {
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.cited__close:hover {
+  color: var(--text);
+  background: var(--page-bg);
+}
+
+.cited__switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.cited__tab {
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+  font-size: 0.8rem;
+}
+
+.cited__tab--active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.cited__source {
+  margin: 0;
+  padding: 0.45rem 1rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.cited__status,
+.cited__body {
+  padding: 1rem;
+}
+
+.cited__status {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.cited__status--error {
+  color: #b91c1c;
+}
+
+.cited__body {
+  overflow-y: auto;
+}
+
+.cited__notice {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 6px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 0.8rem;
+}
+
+.cited__abstract {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.cited__reasons {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.cited__reasons ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+  overflow-wrap: anywhere;
+}

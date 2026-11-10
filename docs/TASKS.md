@@ -50,7 +50,7 @@ _Working order (dependency-driven): 1.1 → 1.2 → 1.3+1.4 → 1.5 → 1.6 → 
 - [ ] **2.8** Localizer v2 — LLM span selection + compare
 - [ ] **2.9** (Optional) cross-encoder re-ranker fine-tune
 - [ ] **2.10** Failure-mode analysis + taxonomy
-- [ ] **2.11** UI: side-by-side view + fetch/open cited paper
+- [x] **2.11** UI: side-by-side view + fetch/open cited paper — Done 2026-11-10 (local; deploys with 2.13): linked citations in the PDF are clickable (`CitationLayer`, targets padded to 16px; "[1–3]" is one target with a switcher); clicking fetches the cited work (2.3) and opens it beside the citing paper (`CitedPane`): the PDF in a second viewer, or the abstract with why the full text was missing, or what was tried. Backend: `/citations` now returns each marker's page rectangles, rebuilt from the stored PDF (deterministic layout, refused if the text differs; ~0.5s once, cached). `.gitignore` now allows cached parses **by sample id** — cited papers fetched by clicking would otherwise have been one `git add` from publication. 189 frontend tests (was 173), 276 backend
 - [ ] **2.12** UI: jump + highlight span; manual-correction fallback
 - [ ] **2.13** ★ MILESTONE — click citation → land on cited passage demo
 

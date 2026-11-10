@@ -8,7 +8,9 @@ localization (2.12), grounded chat citations (3.4) — highlights through here.
 
 from bisect import bisect_left
 
-from app.core.layout import LaidOutSpan
+import pymupdf
+
+from app.core.layout import LaidOutSpan, extract_layout
 from app.models.paper import BBox
 
 #: Vertical tolerance, in PDF points, for treating two rects as the same line.
@@ -93,3 +95,22 @@ def _same_line(a: BBox, b: BBox) -> bool:
     if abs(a.y0 - b.y0) > _SAME_LINE_TOLERANCE:
         return False
     return b.x0 - a.x1 <= _MAX_MERGE_GAP
+
+
+def locate_spans(
+    pdf_bytes: bytes, full_text: str, spans: list[tuple[int, int]]
+) -> list[list[BBox]] | None:
+    """Rectangles for character spans of an already parsed paper (2.11).
+
+    The parse keeps sentence rectangles but not the per-span geometry, so it is
+    rebuilt from the PDF — ``extract_layout`` is deterministic, so the same
+    bytes give the same offsets. If the text does not come out identical (a
+    parse from an older parser version), offsets would point at the wrong
+    characters, so this returns ``None`` rather than misplaced rectangles.
+    """
+    with pymupdf.open(stream=pdf_bytes, filetype="pdf") as doc:
+        layout = extract_layout(doc)
+    if layout.full_text != full_text:
+        return None
+    starts = [span.start for span in layout.spans]
+    return [bboxes_for_span(layout.spans, starts, s, e) for s, e in spans]

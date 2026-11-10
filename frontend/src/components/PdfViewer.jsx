@@ -13,7 +13,9 @@ import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/TextLayer.css";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 
+import CitationLayer from "./CitationLayer.jsx";
 import HighlightLayer from "./HighlightLayer.jsx";
+import { targetsOnPage } from "../lib/citations.js";
 import { bboxesOnPage, scaleFor } from "../lib/geometry.js";
 
 // Bundled with the app rather than fetched from a CDN, so the reader works
@@ -31,6 +33,9 @@ export default function PdfViewer({
   highlightSentences,
   scrollToPage,
   onPageChange,
+  citationGroups,
+  activeCitationKey,
+  onCitationClick,
 }) {
   const containerRef = useRef(null);
   const pageRefs = useRef(new Map());
@@ -130,6 +135,12 @@ export default function PdfViewer({
             <HighlightLayer
               bboxes={bboxesOnPage(highlightSentences, index)}
               scale={scale}
+            />
+            <CitationLayer
+              targets={targetsOnPage(citationGroups, index)}
+              scale={scale}
+              activeKey={activeCitationKey}
+              onSelect={onCitationClick}
             />
             <span className="viewer__page-number">{index + 1}</span>
           </div>

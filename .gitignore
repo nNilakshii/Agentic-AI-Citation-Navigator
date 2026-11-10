@@ -30,21 +30,41 @@ data/cache/embeddings/
 data/fetch-qa/
 data/raw/
 
-# ...except the pre-computed parses and reading paths. These are committed on
-# purpose: the deployed image serves every sample paper without a single LLM
-# call, which is what lets a public demo survive a 5-request-per-minute free
+# ...except the pre-computed parses and reading paths of the ten sample papers.
+# These are committed on purpose: the deployed image serves every sample paper
+# without a single LLM call, which is what lets a public demo survive the free
 # tier with several visitors at once. ~4 MB, and regenerable with
 # `python backend/scripts/qa_reading_paths.py`.
+#
+# Allowed by id, not by folder: anything else in the cache is something opened
+# locally — the developer's own PDFs, or cited papers the reader fetched (2.11)
+# — with its full text, and must never be published. Before, the folder was
+# allowed and private files blocked one by one; one forgotten id published a
+# paper. `scripts/prune_cache.py --check` still double-checks. These ids are
+# sha256 of the files in data/samples/.
 !data/cache/parsed/
-!data/cache/parsed/*.json
 !data/cache/reading_paths/
-!data/cache/reading_paths/*.json
+!data/cache/parsed/053756b54e2d3462d4690b3aed489c962f17df7c3531865e47374c4a651f526c.*.json
+!data/cache/reading_paths/053756b54e2d3462d4690b3aed489c962f17df7c3531865e47374c4a651f526c.*.json
+!data/cache/parsed/23e3249e9a1e75418d82efecab0ea8c4d033b89c93742f63208d47ce01f21233.*.json
+!data/cache/reading_paths/23e3249e9a1e75418d82efecab0ea8c4d033b89c93742f63208d47ce01f21233.*.json
+!data/cache/parsed/4a5751af17ae44d57b271748648805bbe200825533b372c084882b0174dc72a9.*.json
+!data/cache/reading_paths/4a5751af17ae44d57b271748648805bbe200825533b372c084882b0174dc72a9.*.json
+!data/cache/parsed/51e364ef3056f20706bebe0221c3ed195cea1a7aa6019216cb8281a3e94330b7.*.json
+!data/cache/reading_paths/51e364ef3056f20706bebe0221c3ed195cea1a7aa6019216cb8281a3e94330b7.*.json
+!data/cache/parsed/5692a5514787a8c6727b4ff3b726a3385798bc68e12138d1d4af83947e2acf6e.*.json
+!data/cache/reading_paths/5692a5514787a8c6727b4ff3b726a3385798bc68e12138d1d4af83947e2acf6e.*.json
+!data/cache/parsed/6336d5787f65e65422f4228fab40089856c3a09be94b137fd93d6107865f2fec.*.json
+!data/cache/reading_paths/6336d5787f65e65422f4228fab40089856c3a09be94b137fd93d6107865f2fec.*.json
+!data/cache/parsed/6cd768c13674657bdd1e314ef7ee378e929f6cacdd1c7e6be1cba6149d8fbe7b.*.json
+!data/cache/reading_paths/6cd768c13674657bdd1e314ef7ee378e929f6cacdd1c7e6be1cba6149d8fbe7b.*.json
+!data/cache/parsed/92366d22fc0521350d6cbe0ad72bcee754f90e88181d7b4a8e2adb1e7e594fec.*.json
+!data/cache/reading_paths/92366d22fc0521350d6cbe0ad72bcee754f90e88181d7b4a8e2adb1e7e594fec.*.json
+!data/cache/parsed/a04232c85c2b9a367346cd9b7337ae0e47d6c0e65c00c146c4a835f05a607303.*.json
+!data/cache/reading_paths/a04232c85c2b9a367346cd9b7337ae0e47d6c0e65c00c146c4a835f05a607303.*.json
+!data/cache/parsed/bdfaa68d8984f0dc02beaca527b76f207d99b666d31d1da728ee0728182df697.*.json
+!data/cache/reading_paths/bdfaa68d8984f0dc02beaca527b76f207d99b666d31d1da728ee0728182df697.*.json
 
-# Only the ten sample papers belong in the repo. Anything else in the cache is
-# something a developer opened locally — their own PDFs, with their full text —
-# and must not be published. `scripts/prune_cache.py --check` enforces this.
-/data/cache/parsed/531176d05f81f3955cc1f0d4893ec94ede2ebf27e77422eb3b243678af7dc915.v1.json
-/data/cache/reading_paths/531176d05f81f3955cc1f0d4893ec94ede2ebf27e77422eb3b243678af7dc915.*.json
 *.ckpt
 *.pt
 *.bin

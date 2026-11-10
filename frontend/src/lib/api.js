@@ -163,3 +163,25 @@ export function fetchReadingPath(paperId, goalId, { force = false } = {}) {
     method: "POST",
   });
 }
+
+/**
+ * Every citation in a paper, with where each marker sits on the page (2.1, 2.11).
+ *
+ * @returns {Promise<{anchors: Array, references: Array}>}
+ */
+export function fetchCitations(paperId) {
+  return request(`${BASE}/papers/${paperId}/citations`);
+}
+
+/**
+ * The text of the work one reference points at (2.3): its PDF, parsed and
+ * openable by `cited_paper_id`; else its abstract; else `unavailable` with
+ * the reasons. POST because a first call downloads and parses, which takes
+ * seconds; later calls are served from the backend's cache.
+ */
+export function fetchCitedText(paperId, referenceId) {
+  return request(
+    `${BASE}/papers/${paperId}/references/${encodeURIComponent(referenceId)}/text`,
+    { method: "POST" },
+  );
+}

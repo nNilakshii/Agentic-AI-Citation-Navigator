@@ -286,3 +286,77 @@ def test_the_endpoint_404s_for_an_unknown_paper(client):
 
 def test_the_endpoint_rejects_a_malformed_id(client):
     assert client.get("/api/reader/papers/nope/citations").status_code == 422
+
+
+# --- where each citation sits on the page (2.11) ---------------------------------
+
+
+def test_locate_spans_places_a_span_on_its_page(synthetic_pdf):
+    from app.core.highlights import locate_spans
+    from app.core.pdf_parser import parse_pdf
+
+    paper = parse_pdf(synthetic_pdf, "p.pdf")
+    start = paper.full_text.index("Cohan et al.")
+    rects = locate_spans(synthetic_pdf, paper.full_text, [(start, start + 12)])
+    assert rects is not None and len(rects) == 1
+    (box,) = rects[0]
+    assert box.page == 0 and box.x1 > box.x0 and box.y1 > box.y0
+    # Narrower than the whole sentence it sits in.
+    sentence = next(s for s in paper.sentences if s.start_char <= start < s.end_char)
+    assert box.x1 - box.x0 < max(b.x1 - b.x0 for b in sentence.bboxes)
+
+
+def test_locate_spans_refuses_a_text_that_does_not_match(synthetic_pdf):
+    # A parse from another parser version: offsets would point at the wrong
+    # characters, so no rectangles at all rather than misplaced ones.
+    from app.core.highlights import locate_spans
+
+    assert locate_spans(synthetic_pdf, "different text", [(0, 5)]) is None
+
+
+def test_the_citations_endpoint_includes_anchor_boxes(tmp_path, monkeypatch):
+    import app.api.reader as reader
+    from app.models.paper import BBox
+
+    store = PaperStore(tmp_path)
+    paper = make_paper(NUMERIC)
+    store.save_parsed(paper)
+    store.save_pdf(paper.paper_id, b"%PDF-stand-in")
+    box = BBox(page=0, x0=1, y0=2, x1=3, y1=4)
+    seen = []
+
+    def fake_locate(pdf, text, spans):
+        seen.append(spans)
+        return [[box] for _ in spans]
+
+    monkeypatch.setattr(reader, "locate_spans", fake_locate)
+    reader._ANCHOR_BOXES.clear()
+    app.dependency_overrides[get_store] = lambda: store
+    try:
+        client = TestClient(app)
+        url = f"/api/reader/papers/{paper.paper_id}/citations"
+        body = client.get(url).json()
+        client.get(url)  # cached: the PDF is not laid out again
+    finally:
+        app.dependency_overrides.clear()
+        reader._ANCHOR_BOXES.clear()
+    assert body["anchors"]
+    assert all(a["bboxes"] == [box.model_dump()] for a in body["anchors"])
+    assert len(seen) == 1
+
+
+def test_citations_without_a_pdf_have_no_boxes(tmp_path):
+    import app.api.reader as reader
+
+    store = PaperStore(tmp_path)
+    paper = make_paper(NUMERIC)
+    store.save_parsed(paper)
+    reader._ANCHOR_BOXES.clear()
+    app.dependency_overrides[get_store] = lambda: store
+    try:
+        body = (
+            TestClient(app).get(f"/api/reader/papers/{paper.paper_id}/citations").json()
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert body["anchors"] and all(a["bboxes"] == [] for a in body["anchors"])

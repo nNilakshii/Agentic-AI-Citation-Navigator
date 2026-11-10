@@ -25,11 +25,52 @@ vi.mock("./components/PdfViewer.jsx", () => ({
       <button type="button" onClick={() => props.onPageChange?.(1)}>
         scroll to page 1
       </button>
+      {/* One button per citation target the real viewer would draw. */}
+      {props.citationGroups?.map((group) => (
+        <button
+          key={group.key}
+          type="button"
+          onClick={() => props.onCitationClick?.(group)}
+        >
+          {`cite ${group.anchors.map((a) => a.text).join("+")}`}
+        </button>
+      ))}
     </div>
   ),
 }));
 
 const api = await import("./lib/api.js");
+
+const box = { page: 0, x0: 10, y0: 10, x1: 20, y1: 20 };
+const anchor = (id, text, ref, start = 100) => ({
+  id,
+  text,
+  start_char: start,
+  end_char: start + text.length,
+  sentence_id: "s00001",
+  reference_id: ref,
+  bboxes: [box],
+});
+const citationMap = {
+  anchors: [
+    anchor("c0000", "7", "r007"),
+    // "[1-2]": two works, one span, one click target.
+    anchor("c0001", "1", "r001", 200),
+    anchor("c0002", "2", "r002", 200),
+    // Unlinked: nowhere to go, so never clickable.
+    anchor("c0003", "9", null, 300),
+  ],
+};
+const fullTextCited = {
+  citing_paper_id: "x",
+  reference_id: "r007",
+  source: "full-text",
+  cited_paper_id: "c".repeat(64),
+  title: "Neural Machine Translation by Jointly Learning to Align",
+  fetched_from: "https://arxiv.org/pdf/1409.0473",
+  abstract: null,
+  attempts: [],
+};
 
 beforeEach(() => {
   api.listSamples.mockResolvedValue(samples);
@@ -38,6 +79,8 @@ beforeEach(() => {
   api.pdfUrl.mockImplementation((id) => `/api/reader/papers/${id}/pdf`);
   api.fetchReadingPath.mockResolvedValue(readingPath);
   api.fetchStatus.mockResolvedValue({ status: "ok", rankings_left_today: 15 });
+  api.fetchCitations.mockResolvedValue({ anchors: [] });
+  api.fetchCitedText.mockResolvedValue(fullTextCited);
   api.fetchCoverage.mockResolvedValue([
     { filename: "attention-is-all-you-need.pdf", paper_id: paper.paper_id, ready: ["skim"] },
     { filename: "bert.pdf", paper_id: "b".repeat(64), ready: [] },
@@ -722,5 +765,114 @@ describe("failures", () => {
 
     await userEvent.click(sample);
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+  });
+});
+
+
+describe("opening a cited work (2.11)", () => {
+  beforeEach(() => {
+    api.fetchCitations.mockResolvedValue(citationMap);
+  });
+
+  async function clickCitation(name) {
+    await openSamplePaper();
+    await userEvent.click(await screen.findByRole("button", { name }));
+  }
+
+  it("makes linked citations clickable, one target per marker", async () => {
+    await openSamplePaper();
+    expect(await screen.findByRole("button", { name: "cite 7" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "cite 1+2" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /cite 9/ })).not.toBeInTheDocument();
+    expect(api.fetchCitations).toHaveBeenCalledWith(paper.paper_id);
+  });
+
+  it("opens the cited paper's PDF beside the citing one", async () => {
+    await clickCitation("cite 7");
+    const pane = await screen.findByRole("complementary", { name: "Cited work" });
+    expect(api.fetchCitedText).toHaveBeenCalledWith(paper.paper_id, "r007");
+    expect(
+      await within(pane).findByRole("heading", { name: fullTextCited.title }),
+    ).toBeInTheDocument();
+    expect(within(pane).getByText(/Full text from arxiv\.org/)).toBeInTheDocument();
+    const viewers = screen.getAllByTestId("pdf-viewer-stub");
+    expect(viewers.map((v) => v.dataset.fileUrl)).toContain(
+      `/api/reader/papers/${"c".repeat(64)}/pdf`,
+    );
+    // The reading-path panel makes way while the cited work is open.
+    expect(screen.queryByRole("complementary", { name: "Reading path" })).toBeNull();
+  });
+
+  it("says plainly when only the abstract could be found", async () => {
+    api.fetchCitedText.mockResolvedValue({
+      ...fullTextCited,
+      source: "abstract",
+      cited_paper_id: null,
+      abstract: "We study things.",
+      abstract_from: "openalex",
+      attempts: ["https://dl.acm.org/x.pdf: HTTP 403"],
+    });
+    await clickCitation("cite 7");
+    expect(await screen.findByText(/Only the abstract is available/)).toBeInTheDocument();
+    expect(screen.getByText("We study things.")).toBeInTheDocument();
+    expect(screen.getByText(/HTTP 403/)).toBeInTheDocument();
+    expect(screen.getAllByTestId("pdf-viewer-stub")).toHaveLength(1);
+  });
+
+  it("shows what was tried when nothing could be found", async () => {
+    api.fetchCitedText.mockResolvedValue({
+      ...fullTextCited,
+      source: "unavailable",
+      cited_paper_id: null,
+      attempts: ["the reference was not identified (2.2)"],
+    });
+    await clickCitation("cite 7");
+    expect(await screen.findByText(/could not be found/)).toBeInTheDocument();
+    expect(screen.getByText(/not identified/)).toBeInTheDocument();
+  });
+
+  it("reports a failed fetch instead of hanging", async () => {
+    api.fetchCitedText.mockRejectedValue(new Error("Request failed (502)"));
+    await clickCitation("cite 7");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Request failed (502)");
+  });
+
+  it("switches between the works one marker names", async () => {
+    await clickCitation("cite 1+2");
+    const pane = await screen.findByRole("complementary", { name: "Cited work" });
+    await waitFor(() => expect(api.fetchCitedText).toHaveBeenCalledWith(paper.paper_id, "r001"));
+    await userEvent.click(within(pane).getByRole("button", { name: "[2]" }));
+    await waitFor(() => expect(api.fetchCitedText).toHaveBeenCalledWith(paper.paper_id, "r002"));
+    expect(within(pane).getByRole("button", { name: "[2]" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("never shows a slower, earlier answer for a newer click", async () => {
+    let answerFirst;
+    api.fetchCitedText
+      .mockImplementationOnce(() => new Promise((resolve) => (answerFirst = resolve)))
+      .mockResolvedValueOnce({ ...fullTextCited, title: "The second work" });
+    await clickCitation("cite 7");
+    await userEvent.click(screen.getByRole("button", { name: "cite 1+2" }));
+    expect(await screen.findByRole("heading", { name: "The second work" })).toBeInTheDocument();
+    answerFirst({ ...fullTextCited, title: "The first work" });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByRole("heading", { name: "The first work" })).toBeNull();
+  });
+
+  it("closes back to the reading path", async () => {
+    await clickCitation("cite 7");
+    await screen.findByRole("complementary", { name: "Cited work" });
+    await userEvent.click(screen.getByRole("button", { name: "Close the cited work" }));
+    expect(screen.queryByRole("complementary", { name: "Cited work" })).toBeNull();
+  });
+
+  it("a paper with no citation map still opens", async () => {
+    api.fetchCitations.mockRejectedValue(new Error("boom"));
+    await openSamplePaper();
+    expect(screen.getByTestId("pdf-viewer-stub")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^cite / })).toBeNull();
   });
 });

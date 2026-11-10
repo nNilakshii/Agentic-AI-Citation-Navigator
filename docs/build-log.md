@@ -564,6 +564,36 @@ BM25.
 **Result:** the app serves the hybrid (localizer v2) with a `clear_match` flag. On test:
 accuracy@1 23.0%, @5 54.3%, sentence F1 0.166.
 
+## Task 2.11 — the cited paper beside the citing one
+
+### Citations had no place on the page
+
+The parse stores rectangles per sentence, not per character, so there was nothing to make a
+"[13]" clickable — and making the whole sentence the target would have been both vague and
+in the way of text selection. The layout is deterministic, so it is rebuilt from the stored
+PDF (~0.5s, cached) and each marker is placed through the same function that places sentence
+highlights; if the rebuilt text differs from the parse, no rectangles are returned rather
+than misplaced ones. Numeric markers are ~5–10pt wide, so targets are padded to 16px.
+
+### Every click would have written a stranger's paper into a committed folder
+
+A cited paper opened from the reader is parsed into `data/cache/parsed/` — the folder that
+is committed so the deployed image can serve the samples. 2.3 had kept QA fetches out of it
+and left a checker for the rest; with the interface, every click does it. Two papers fetched
+in the first end-to-end test showed up untracked, one `git add -A` from publication. The
+`.gitignore` used to allow the folder and block private files one by one; it now allows the
+ten sample papers by id and nothing else.
+
+### Slow answers must not overwrite new clicks
+
+The first fetch of a cited paper takes seconds (resolution, download, parse — 16s for one
+paywalled paper that fell back to its OpenAlex abstract). A reader who clicks a second
+citation meanwhile must not have the first one's answer land on top; each fetch is guarded,
+and a test confirms that removing the guard shows the stale paper.
+
+**Result:** click a citation, see the cited work beside the paper — its PDF, its abstract
+with the reason the PDF was missing, or what was tried.
+
 
 
 1. **Unit tests caught the logic; only a live run caught the damage.** Every bug in B and C

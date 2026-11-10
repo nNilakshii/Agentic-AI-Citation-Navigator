@@ -511,6 +511,18 @@ raw score barely separates right from wrong; the margin does. Clear matches are 
 36% of the time against 23% overall — the UI (2.11/2.12) should present them as "likely" and
 everything else as a ranked list to check, never as certain.
 
+## Decided: citation markers are placed by rebuilding the layout
+
+Settled at 2.11 (2026-11-10).
+
+`/citations` returns each anchor's page rectangles. The parse keeps rectangles per sentence
+only, so the layout is rebuilt from the stored PDF — deterministic, so the same bytes give
+the same offsets — and markers are placed by `bboxes_for_span`, the function behind every
+other highlight. A text mismatch returns no rectangles, never wrong ones. The cited work
+opens in a pane beside the citing paper and replaces the reading-path panel while open; it
+shows the PDF, the abstract, or the reasons neither was found. Jumping to the passage is
+2.12.
+
 ## Open decisions
 
 - **GROBID adoption** — revisit at 2.1, where structured reference parsing is the task.
