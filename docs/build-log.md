@@ -621,6 +621,33 @@ the ranking, not the open paper (found when a test fixture returned nothing).
 **Result:** click a citation, the cited paper opens beside it, highlighted and scrolled to
 the best candidate, with the alternatives one click away.
 
+## Task 3.4 — grounded evidence (RAG over the cited paper)
+
+### Grounding by construction, again
+
+The reading path (1.6) let the model return only sentence numbers. An answer has to be
+prose, so the rule became: every claim names the passage it rests on and quotes it, and the
+backend checks each quote verbatim (up to case, spacing and typographic dashes and quotes)
+against that passage. A claim that misquotes, or cites a passage it was not shown, is
+dropped and counted. If the model says it cannot tell, or nothing survives, the answer is
+`insufficient`. On a real citation, "What is the capital of France?" came back
+insufficient; a question about the attention mechanism came back with three verified
+quotes.
+
+### What the check does not prove
+
+The quote is real; whether the claim says only what the quote says is a separate question.
+One claim in the first live run added "English-to-French", which its quote did not
+contain. That gap is what faithfulness evaluation (3.8) measures — so it is reported, not
+claimed away.
+
+### Small things
+
+- Fetching, parsing and embedding are blocking; inside an async endpoint they would freeze
+  every other request, so they run in a worker thread.
+- The question budget is charged just before the model is called, so asking about a paper
+  with no text costs nothing; answers are cached by question, failures never.
+
 
 
 1. **Unit tests caught the logic; only a live run caught the damage.** Every bug in B and C

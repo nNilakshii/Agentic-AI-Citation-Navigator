@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     #: ...and one visitor's share of it, so a single person cannot take the
     #: lot. Only uncached rankings count against either. 0 disables.
     rank_limit_per_visitor: int = 3
+    #: Questions answered by the grounded-evidence tool (3.4), counted apart
+    #: from rankings so a curious reader cannot spend the reading-path budget.
+    #: Only uncached answers count. 0 disables.
+    ask_budget_per_day: int = 30
+    ask_limit_per_visitor: int = 10
 
     def origins(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]

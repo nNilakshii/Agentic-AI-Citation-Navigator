@@ -113,8 +113,51 @@ def budget_remaining() -> int:
     return max(0, settings.rank_budget_per_day - len(_recent(_global, time.time())))
 
 
+#: The same, for questions (3.4).
+_asked: list[float] = []
+_asked_per_client: dict[str, list[float]] = defaultdict(list)
+
+
+def check_ask_budget(request: Request) -> None:
+    """Raise if answering this question would exceed either question budget.
+
+    Like rankings, only an answer that calls the model counts.
+    """
+    settings = get_settings()
+    global _asked
+    now = time.time()
+    _asked = _recent(_asked, now)
+    if settings.ask_budget_per_day > 0 and len(_asked) >= settings.ask_budget_per_day:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Today's budget for questions is spent — this demo runs on a free "
+                "API tier. Questions already asked are still answered."
+            ),
+        )
+    key = client_key(request)
+    mine = _recent(_asked_per_client[key], now)
+    _asked_per_client[key] = mine
+    if (
+        settings.ask_limit_per_visitor > 0
+        and len(mine) >= settings.ask_limit_per_visitor
+    ):
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"You've asked {settings.ask_limit_per_visitor} new questions today, "
+                "this demo's per-visitor share of a free API tier."
+            ),
+            headers={"Retry-After": str(DAY_SECONDS)},
+        )
+    _asked.append(now)
+    _asked_per_client[key].append(now)
+
+
 def reset_budgets() -> None:
     """Test helper — the budgets are process state."""
-    global _global
+    global _global, _asked
     _global = []
     _per_client.clear()
+    _asked = []
+    _asked_per_client.clear()

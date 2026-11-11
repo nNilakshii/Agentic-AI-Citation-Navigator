@@ -36,7 +36,7 @@ from app.core.lexical import bm25_scores, hybrid_scores
 from app.core.passages import passages_from_abstract, passages_from_paper
 from app.core.pdf_parser import PARSER_VERSION
 from app.models.citation import CitationMap
-from app.models.cited import TextSource
+from app.models.cited import CitedText, TextSource
 from app.models.localization import Localization, LocalizedPassage
 from app.models.paper import ParsedPaper
 from app.models.passage import Passage, PassageSet
@@ -179,23 +179,13 @@ def localize(
         result.notes.append("this citation is not linked to a reference entry (2.1)")
         return result
 
-    cited = fetch_cited_text(
+    cited, passages, notes = cited_passages(
         citing, anchor.reference_id, resolution, store, scholar, downloader, openalex
     )
     result.source = cited.source
     result.cited_paper_id = cited.cited_paper_id
-    result.notes.extend(cited.attempts)
-
-    passages: PassageSet | None = None
-    if cited.source is TextSource.FULL_TEXT:
-        paper = store.load_parsed(cited.cited_paper_id, PARSER_VERSION)
-        if paper is not None:
-            passages = passages_from_paper(paper)
-    elif cited.source is TextSource.ABSTRACT and cited.abstract:
-        passages = passages_from_abstract(cited.abstract)
-        result.notes.append("only the abstract was available, so only it was searched")
+    result.notes.extend(notes)
     if passages is None:
-        result.notes.append("no text of the cited paper to search")
         return result
 
     # The margin needs a runner-up, so rank at least two even when k is 1.
@@ -203,3 +193,34 @@ def localize(
     result.clear_match = is_clear_match(ranked)
     result.results = ranked[:k]
     return result
+
+
+def cited_passages(
+    citing: ParsedPaper,
+    reference_id: str,
+    resolution: ResolutionMap,
+    store: PaperStore,
+    scholar: SemanticScholar,
+    downloader: Downloader,
+    openalex: OpenAlex | None,
+) -> tuple[CitedText, PassageSet | None, list[str]]:
+    """The cited work's text (2.3) as candidate passages (2.4), with notes.
+
+    Shared by the localizer and the grounded-evidence tool (3.4), so both
+    search exactly the same text. ``None`` passages when there is none.
+    """
+    cited = fetch_cited_text(
+        citing, reference_id, resolution, store, scholar, downloader, openalex
+    )
+    notes = list(cited.attempts)
+    passages: PassageSet | None = None
+    if cited.source is TextSource.FULL_TEXT:
+        paper = store.load_parsed(cited.cited_paper_id, PARSER_VERSION)
+        if paper is not None:
+            passages = passages_from_paper(paper)
+    elif cited.source is TextSource.ABSTRACT and cited.abstract:
+        passages = passages_from_abstract(cited.abstract)
+        notes.append("only the abstract was available, so only it was searched")
+    if passages is None:
+        notes.append("no text of the cited paper to search")
+    return cited, passages, notes

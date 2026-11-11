@@ -526,6 +526,19 @@ PDF (or marks it in an abstract), scrolls to it, and lists the alternatives — 
 only when `clear_match` is set — with "None of these" as the manual fallback. Page
 placeholders are sized before they render so a scroll to a passage lands where aimed.
 
+## Decided: grounded answers are quoted claims, checked verbatim
+
+Settled at 3.4 (2026-11-10).
+
+`POST /papers/{id}/citations/{anchor}/ask` retrieves from the cited work's passages with the
+2.7 hybrid (question top 6 + citing-sentence top 2, overlap-free) and asks Gemini for at most
+four claims, each naming one passage and quoting 5–25 words of it. The backend keeps a claim
+only if its quote is in the passage it names; otherwise it is dropped and counted in
+`dropped_claims`. `insufficient` when the model declines or nothing survives; `unavailable`
+when the cited work has no text. This proves the evidence exists, not that each claim stays
+within it — faithfulness is measured in 3.8, not assumed. Answers are cached per question;
+questions have their own daily budget, separate from rankings.
+
 ## Open decisions
 
 - **GROBID adoption** — revisit at 2.1, where structured reference parsing is the task.

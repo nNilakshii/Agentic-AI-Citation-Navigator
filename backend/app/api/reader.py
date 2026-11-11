@@ -4,14 +4,17 @@ Everything is addressed by ``paper_id`` (``sha256`` of the PDF bytes), so
 uploading the same paper twice is idempotent and costs one cache lookup.
 """
 
+import hashlib
+import json
 import re
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
+from pydantic import BaseModel, Field
 
-from app.api.limits import check_rank_budget
+from app.api.limits import check_ask_budget, check_rank_budget
 from app.cache import PaperStore
 from app.core.citations import CITATION_VERSION, build_citation_map
 from app.core.goals import GOAL_SPECS
@@ -20,13 +23,21 @@ from app.core.pdf_parser import PARSER_VERSION, paper_id_for, parse_pdf
 from app.core.cited_text import fetch_cited_text
 from app.core.embedding import CACHE_DIR as EMBEDDING_CACHE
 from app.core.embedding import Embedder, EmbedderUnavailable, get_embedder
-from app.core.localizer import DEFAULT_K, localize
+from app.core.evidence import EVIDENCE_VERSION, MAX_QUESTION_CHARS, answer_question
+from app.core.localizer import (
+    DEFAULT_K,
+    LOCALIZER_VERSION,
+    citance_query,
+    localize,
+)
+from app.core.passages import PASSAGE_VERSION
 from app.core.passages import passages_from_paper
 from app.core.reading_path import RANKER_VERSION, build_reading_path
 from app.core.resolution import RESOLVER_VERSION, resolve_references
 from app.llm.client import LLMClient, LLMError, LLMNotConfigured, get_llm_client
 from app.models.citation import CitationMap
 from app.models.cited import CitedText
+from app.models.evidence import AnswerStatus, GroundedAnswer
 from app.models.localization import Localization
 from app.models.passage import PassageSet
 from app.models.paper import ParsedPaper, PaperSummary, Section
@@ -334,6 +345,87 @@ def localize_citation(
         ) from error
     except EmbedderUnavailable as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+class AskRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=MAX_QUESTION_CHARS)
+
+
+@router.post(
+    "/papers/{paper_id}/citations/{anchor_id}/ask",
+    response_model=GroundedAnswer,
+    summary="Answer a question about a cited work from its text only (task 3.4)",
+)
+async def ask_citation(
+    request: Request,
+    paper_id: str,
+    anchor_id: str,
+    body: AskRequest,
+    store: PaperStore = Depends(get_store),
+    scholar: SemanticScholar = Depends(get_scholar),
+    downloader: Downloader = Depends(get_downloader),
+    openalex: OpenAlex = Depends(get_openalex),
+    embedder: Embedder = Depends(get_embedder),
+    llm: LLMClient = Depends(get_llm_client),
+) -> GroundedAnswer:
+    """Retrieve from the cited paper and answer in quoted, checked claims.
+
+    ``insufficient`` means the retrieved passages do not support an answer —
+    the tool does not guess. Answers are cached by question; only a question
+    that reaches the model counts against the daily budget.
+    """
+    paper = _load_or_404(paper_id, store)
+    citations = build_citation_map(paper)
+    anchor = next((a for a in citations.anchors if a.id == anchor_id), None)
+    if anchor is None:
+        raise HTTPException(
+            status_code=404, detail=f"no citation {anchor_id} in {paper_id}"
+        )
+    question = " ".join(body.question.split())
+    key = hashlib.sha256(
+        json.dumps(
+            [
+                paper_id,
+                anchor_id,
+                question.lower(),
+                EVIDENCE_VERSION,
+                LOCALIZER_VERSION,
+                PASSAGE_VERSION,
+                getattr(llm, "model", None),
+            ]
+        ).encode()
+    ).hexdigest()
+    cached = store.load_answer(key)
+    if cached is not None:
+        return cached
+
+    resolution = await run_in_threadpool(_resolution, paper, store, scholar)
+    try:
+        answer = await answer_question(
+            paper,
+            anchor_id,
+            citance_query(paper, citations, anchor_id),
+            anchor.reference_id,
+            question,
+            resolution,
+            store,
+            scholar,
+            downloader,
+            openalex,
+            embedder,
+            llm,
+            cache_dir=EMBEDDING_CACHE,
+            spend=lambda: check_ask_budget(request),
+        )
+    except (LLMNotConfigured, EmbedderUnavailable) as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except LLMError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+    # "Unavailable" may be a passing download failure: never remembered.
+    if answer.status in (AnswerStatus.ANSWERED, AnswerStatus.INSUFFICIENT):
+        store.save_answer(key, answer)
+    return answer
 
 
 @router.get("/papers/{paper_id}/pdf", summary="Get the original PDF bytes")

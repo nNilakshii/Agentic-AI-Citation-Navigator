@@ -58,7 +58,7 @@ _Working order (dependency-driven): 1.1 → 1.2 → 1.3+1.4 → 1.5 → 1.6 → 
 - [ ] **3.1** Citation-intent data prep (SciCite)
 - [ ] **3.2** Intent v1 — LLM prompt + evaluate (macro-F1)
 - [ ] **3.3** (Optional) Intent v2 — fine-tune SciBERT + compare
-- [ ] **3.4** Grounded-evidence tool (RAG over cited paper via localizer)
+- [x] **3.4** Grounded-evidence tool (RAG over cited paper via localizer) — Done 2026-11-10 (backend): `app/core/evidence.py` + `POST /papers/{id}/citations/{anchor}/ask`. Retrieves with the 2.7 hybrid (top 6 for the question + top 2 for the citing sentence, no overlaps) from the cited work's text (2.3/2.4); Gemini answers in at most four claims, each naming a passage and **quoting it**; every quote is checked verbatim against the passage it names, and failures are dropped and counted. Model says it cannot tell, or nothing survives → `insufficient`, never a guess. Answers cached by question; own daily budget (30, 10 per visitor), charged only when the model is called. Live on the Bahdanau citation: a mechanism question answered with 3 verified quotes; "capital of France?" → insufficient. The check proves quotes are real, not that claims stay within them (one claim added "English-to-French") — that is 3.8's job. 296 backend tests (was 276)
 - [ ] **3.5** Bibliometrics tool (Semantic Scholar / OpenAlex)
 - [ ] **3.6** Agent orchestration / tool routing
 - [ ] **3.7** Chat UI panel over the bridge
