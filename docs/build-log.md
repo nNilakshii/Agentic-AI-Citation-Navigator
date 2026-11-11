@@ -676,6 +676,17 @@ partial so a chart does not show it as a collapse. The most telling number is ou
 often, and where, the citing paper uses the work — Attention cites Bahdanau five times
 across four sections, LSTM once in its introduction.
 
+## Task 3.1 — SciCite, audited before use
+
+The official release still downloads (unlike CL-SciSumm's), but it was checked rather than
+trusted. No test text appears in train, so nothing leaks into the benchmark. The citation
+offsets, though, are wrong for about 10% of examples — shifted ("he " for "[40]"), cut
+mid-bracket, or pointing at a plain word ("Atlantic") — and six are NaN; so the classifier
+reads the citation text as given, which is also what the published baseline did. One design
+choice was reversed on reflection: dropping the four duplicate test texts would make our
+test set 1,857 rows against the published 1,861, and a comparison is only fair on the same
+rows — splits now load as released, with de-duplication opt-in for prompt development.
+
 
 
 1. **Unit tests caught the logic; only a live run caught the damage.** Every bug in B and C
