@@ -65,10 +65,14 @@ class OpenAlex:
         self._last = 0.0
         self.network_calls = 0
 
-    def by_doi(self, doi: str) -> dict | None:
-        return self._get(f"/works/doi:{doi}", {"select": FIELDS})
+    def by_doi(
+        self, doi: str, select: str = FIELDS, fresh: bool = False
+    ) -> dict | None:
+        return self._get(f"/works/doi:{doi}", {"select": select}, fresh=fresh)
 
-    def by_title(self, title: str) -> dict | None:
+    def by_title(
+        self, title: str, select: str = FIELDS, fresh: bool = False
+    ) -> dict | None:
         """The top title-search hit, unverified — the caller checks the match."""
         # Colons and commas are syntax in OpenAlex filters; a title holding
         # one ("TVM: An Automated ...") silently found nothing.
@@ -77,18 +81,19 @@ class OpenAlex:
             return None
         body = self._get(
             "/works",
-            {"filter": f"title.search:{query}", "per-page": 1, "select": FIELDS},
+            {"filter": f"title.search:{query}", "per-page": 1, "select": select},
+            fresh=fresh,
         )
         results = (body or {}).get("results") or []
         return results[0] if results else None
 
     # --- transport ------------------------------------------------------------
 
-    def _get(self, path: str, params: dict) -> Any:
+    def _get(self, path: str, params: dict, fresh: bool = False) -> Any:
         key = hashlib.sha256(
             json.dumps([path, params], sort_keys=True).encode()
         ).hexdigest()
-        cached = self._read_cache(key)
+        cached = None if fresh else self._read_cache(key)
         if cached is not None:
             return cached["body"]
 

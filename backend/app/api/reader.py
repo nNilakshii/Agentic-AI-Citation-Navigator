@@ -20,6 +20,7 @@ from app.core.citations import CITATION_VERSION, build_citation_map
 from app.core.goals import GOAL_SPECS
 from app.core.highlights import locate_spans
 from app.core.pdf_parser import PARSER_VERSION, paper_id_for, parse_pdf
+from app.core.bibliometrics import BIBLIOMETRICS_VERSION, bibliometrics_for, is_stale
 from app.core.cited_text import fetch_cited_text
 from app.core.embedding import CACHE_DIR as EMBEDDING_CACHE
 from app.core.embedding import Embedder, EmbedderUnavailable, get_embedder
@@ -35,6 +36,7 @@ from app.core.passages import passages_from_paper
 from app.core.reading_path import RANKER_VERSION, build_reading_path
 from app.core.resolution import RESOLVER_VERSION, resolve_references
 from app.llm.client import LLMClient, LLMError, LLMNotConfigured, get_llm_client
+from app.models.bibliometrics import Bibliometrics
 from app.models.citation import CitationMap
 from app.models.cited import CitedText
 from app.models.evidence import AnswerStatus, GroundedAnswer
@@ -345,6 +347,51 @@ def localize_citation(
         ) from error
     except EmbedderUnavailable as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@router.get(
+    "/papers/{paper_id}/references/{reference_id}/bibliometrics",
+    response_model=Bibliometrics,
+    summary="How influential a cited work is, and how this paper uses it (3.5)",
+)
+def reference_bibliometrics(
+    paper_id: str,
+    reference_id: str,
+    refresh: bool = Query(False, description="Fetch counts even if cached"),
+    store: PaperStore = Depends(get_store),
+    scholar: SemanticScholar = Depends(get_scholar),
+    openalex: OpenAlex = Depends(get_openalex),
+) -> Bibliometrics:
+    """Citation counts from both databases, the yearly trend, and local use.
+
+    Counts are cached for 30 days, then fetched again: unlike a title, a
+    citation count is out of date the day after it is read.
+    """
+    paper = _load_or_404(paper_id, store)
+    resolution = _resolution(paper, store, scholar)
+    item = next((i for i in resolution.items if i.reference_id == reference_id), None)
+    if item is None:
+        raise HTTPException(
+            status_code=404, detail=f"no reference {reference_id} in {paper_id}"
+        )
+    key = hashlib.sha256(
+        f"{paper_id}|{reference_id}|{BIBLIOMETRICS_VERSION}".encode()
+    ).hexdigest()
+    cached = store.load_bibliometrics(key)
+    if cached is not None and not refresh and not is_stale(cached.fetched_at):
+        return cached
+    result = bibliometrics_for(
+        paper,
+        build_citation_map(paper),
+        item,
+        scholar,
+        openalex,
+        fresh=refresh or cached is not None,
+    )
+    # A failed lookup would freeze missing numbers for a month (the 1.6 lesson).
+    if not any("failed" in note for note in result.notes):
+        store.save_bibliometrics(key, result)
+    return result
 
 
 class AskRequest(BaseModel):

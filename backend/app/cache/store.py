@@ -29,6 +29,7 @@ class PaperStore:
         self.resolutions_dir = self.root / "resolutions"
         self.fetched_dir = self.root / "fetched"
         self.answers_dir = self.root / "answers"
+        self.bibliometrics_dir = self.root / "bibliometrics"
 
     # --- paths ---------------------------------------------------------
 
@@ -125,6 +126,21 @@ class PaperStore:
         self.answers_dir.mkdir(parents=True, exist_ok=True)
         payload = answer.model_dump_json().encode("utf-8")
         self._write_atomic(self.answers_dir / f"{key}.json", payload)
+
+    def load_bibliometrics(self, key: str) -> "Bibliometrics | None":
+        """Cached counts (3.5); the caller decides whether they are too old."""
+        from app.models.bibliometrics import Bibliometrics
+
+        try:
+            text = (self.bibliometrics_dir / f"{key}.json").read_text(encoding="utf-8")
+            return Bibliometrics.model_validate_json(text)
+        except (OSError, ValueError):
+            return None
+
+    def save_bibliometrics(self, key: str, result: "Bibliometrics") -> None:
+        self.bibliometrics_dir.mkdir(parents=True, exist_ok=True)
+        payload = result.model_dump_json().encode("utf-8")
+        self._write_atomic(self.bibliometrics_dir / f"{key}.json", payload)
 
     def load_fetched(self, url: str) -> str | None:
         """The paper id a cited-paper URL was fetched and parsed as, if it was."""

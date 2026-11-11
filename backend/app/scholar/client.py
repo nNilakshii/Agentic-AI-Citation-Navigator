@@ -110,9 +110,17 @@ class SemanticScholar:
             out.extend(body if isinstance(body, list) else [None] * len(chunk))
         return out
 
-    def paper(self, paper_id: str, fields: str = "title,abstract") -> dict | None:
-        """One paper's metadata — 2.3 uses it for the abstract fallback."""
-        return self._get(f"/paper/{paper_id}", {"fields": fields})
+    def paper(
+        self, paper_id: str, fields: str = "title,abstract", fresh: bool = False
+    ) -> dict | None:
+        """One paper's metadata — 2.3 uses it for the abstract fallback.
+
+        ``fresh`` skips the disk cache (the answer still refreshes it): citation
+        counts grow, and 3.5 decides itself how old a count may be.
+        """
+        return self._request(
+            "GET", f"/paper/{paper_id}", {"fields": fields}, None, fresh=fresh
+        )
 
     def match_title(self, title: str) -> dict | None:
         """The single best title match, or ``None``. One request per call."""
@@ -130,9 +138,16 @@ class SemanticScholar:
     def _post(self, path: str, params: dict, payload: dict) -> Any:
         return self._request("POST", path, params, payload)
 
-    def _request(self, method: str, path: str, params: dict, payload: dict | None):
+    def _request(
+        self,
+        method: str,
+        path: str,
+        params: dict,
+        payload: dict | None,
+        fresh: bool = False,
+    ):
         key = self._cache_key(method, path, params, payload)
-        cached = self._read_cache(key)
+        cached = None if fresh else self._read_cache(key)
         if cached is not None:
             return cached["body"]
 
