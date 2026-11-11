@@ -967,3 +967,272 @@ button:disabled {
   border-radius: 2px;
   padding: 0 1px;
 }
+
+/* --- tabs, chat and impact in the cited pane (3.7) ----------------- */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.cited__tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.4rem 0.75rem 0;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+
+.cited__tabbtn {
+  padding: 0.35rem 0.65rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.cited__tabbtn--active {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.cited__panel {
+  max-height: 42%;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+
+/* The candidate list already scrolls inside the panel. */
+.cited__panel .candidates {
+  max-height: none;
+  border-bottom: none;
+}
+
+.chat,
+.impact {
+  padding: 0.6rem 0.75rem;
+}
+
+.chat__lead,
+.impact__meta,
+.impact__note {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.chat__turns {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.chat__question {
+  margin: 0 0 0.3rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.chat__claims {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.chat__claim {
+  margin: 0 0 0.15rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.chat__quote {
+  display: block;
+  width: 100%;
+  padding: 0.3rem 0.5rem;
+  border: none;
+  border-left: 3px solid rgb(5 150 105 / 45%);
+  border-radius: 0 4px 4px 0;
+  background: rgb(16 185 129 / 7%);
+  text-align: left;
+  font-size: 0.78rem;
+  font-style: italic;
+  color: var(--text);
+}
+
+.chat__quote:hover,
+.chat__quote--focused {
+  border-left-color: rgb(5 150 105 / 90%);
+  background: rgb(16 185 129 / 15%);
+}
+
+.chat__where {
+  font-style: normal;
+  color: var(--muted);
+}
+
+.chat__none {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.chat__caveats {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.75rem;
+  color: #9a3412;
+}
+
+.chat__status {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.chat__status--error,
+.impact__status--error {
+  color: #b91c1c;
+}
+
+.chat__suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.chat__suggestion {
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+  font-size: 0.75rem;
+}
+
+.chat__suggestion:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chat__form {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+
+.chat__input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.chat__send {
+  padding: 0.4rem 0.8rem;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.85rem;
+}
+
+.impact__use {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.impact__sections {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.impact__counts {
+  margin: 0 0 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.impact__count {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+}
+
+.impact__count dt {
+  color: var(--muted);
+}
+
+.impact__count dd {
+  margin: 0;
+}
+
+.impact__status {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* Citations per year: one series in one hue, 2px gaps, rounded data-ends
+   anchored to the baseline; the year in progress is hatched, not recoloured. */
+.bars {
+  margin: 0.25rem 0 0.5rem;
+}
+
+.bars__title {
+  margin-bottom: 0.3rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.bars__plot {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 56px;
+  border-bottom: 1px solid var(--border);
+}
+
+.bars__bar {
+  flex: 1;
+  min-width: 3px;
+  background: #2563eb;
+  border-radius: 2px 2px 0 0;
+}
+
+.bars__bar:hover {
+  background: #1d4ed8;
+}
+
+.bars__bar--partial {
+  background: repeating-linear-gradient(
+    45deg,
+    #2563eb 0 2px,
+    rgb(37 99 235 / 30%) 2px 4px
+  );
+}
+
+.bars__axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.15rem;
+  font-size: 0.68rem;
+  color: var(--muted);
+}

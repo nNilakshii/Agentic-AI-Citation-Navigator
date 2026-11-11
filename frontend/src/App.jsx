@@ -224,33 +224,37 @@ export default function App() {
     if (cited.source === "unavailable") return undefined;
     let current = true;
     setBridge((b) => b && { ...b, loc: { status: "loading" } });
-    Promise.all([
+    // Settled separately: without passage finding (a 503 on a server with no
+    // embedding model) the parse is still what lets a chat quote be shown.
+    Promise.allSettled([
       api.localizeCitation(paper.paper_id, anchor.id),
       cited.source === "full-text" ? api.getPaper(cited.cited_paper_id) : null,
-    ])
-      .then(([result, citedPaper]) => {
-        if (!current) return;
-        // A malformed answer must cost the ranking, not the open paper.
-        if (!Array.isArray(result?.results)) {
-          throw new Error("the passage ranking came back incomplete");
-        }
-        setBridge(
-          (b) =>
-            b && {
-              ...b,
-              loc: {
-                status: "ready",
-                result,
-                citedPaper,
-                chosen: result.results.length ? 0 : null,
-              },
-            },
-        );
-      })
-      .catch((cause) => {
-        if (!current) return;
-        setBridge((b) => b && { ...b, loc: { status: "error", error: cause } });
-      });
+    ]).then(([ranked, parsed]) => {
+      if (!current) return;
+      const citedPaper = parsed.status === "fulfilled" ? parsed.value : null;
+      const result = ranked.status === "fulfilled" ? ranked.value : null;
+      // A malformed answer must cost the ranking, not the open paper.
+      const fault =
+        ranked.status === "rejected"
+          ? ranked.reason
+          : !Array.isArray(result?.results)
+            ? new Error("the passage ranking came back incomplete")
+            : null;
+      setBridge(
+        (b) =>
+          b && {
+            ...b,
+            loc: fault
+              ? { status: "error", error: fault, citedPaper }
+              : {
+                  status: "ready",
+                  result,
+                  citedPaper,
+                  chosen: result.results.length ? 0 : null,
+                },
+          },
+      );
+    });
     return () => {
       current = false;
     };
@@ -388,7 +392,11 @@ export default function App() {
 
       {bridge ? (
         <CitedPane
+          // A fresh pane per cited work: its tab, chat and quoted passage
+          // belong to that work, not the next one opened.
+          key={bridge.group.anchors[bridge.index].id}
           bridge={bridge}
+          citingPaperId={paper.paper_id}
           pdfUrl={api.pdfUrl}
           onClose={() => setBridge(null)}
           onPick={(index) => openCited(bridge.group, index)}

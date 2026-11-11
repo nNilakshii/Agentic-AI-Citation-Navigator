@@ -89,6 +89,34 @@ const citedPaper = {
     { id: "s00040", text: "We align and translate jointly.", page: 2, bboxes: [{ page: 2, x0: 1, y0: 400, x1: 9, y1: 410 }] },
   ],
 };
+const groundedAnswer = {
+  question: "q",
+  status: "answered",
+  source: "full-text",
+  claims: [
+    { text: "It aligns while translating.", passage_id: "p0040", quote: "align and translate jointly" },
+  ],
+  passages: [{ rank: 1, score: 2, passage: passage("p0040", ["s00040"], "We align and translate jointly.", 900) }],
+  caveats: [],
+  dropped_claims: 0,
+  notes: [],
+};
+const bibliometrics = {
+  reference_id: "r007",
+  counts: [
+    { source: "semantic-scholar", citations: 30818, influential: 2654 },
+    { source: "openalex", citations: 26032, influential: null },
+  ],
+  by_year: [
+    { year: 2024, citations: 2614, partial: false },
+    { year: 2025, citations: 2045, partial: false },
+    { year: 2026, citations: 1233, partial: true },
+  ],
+  percentile: 99.0,
+  in_this_paper: { mentions: 5, sections: ["1 Introduction", "3 Model Architecture"] },
+  fetched_at: "2026-11-10T12:00:00+00:00",
+  notes: [],
+};
 const fullTextCited = {
   citing_paper_id: "x",
   reference_id: "r007",
@@ -111,6 +139,8 @@ beforeEach(() => {
   api.fetchCitedText.mockResolvedValue(fullTextCited);
   api.localizeCitation.mockResolvedValue(localization);
   api.getPaper.mockResolvedValue(citedPaper);
+  api.askCitation.mockResolvedValue(groundedAnswer);
+  api.fetchBibliometrics.mockResolvedValue(bibliometrics);
   api.fetchCoverage.mockResolvedValue([
     { filename: "attention-is-all-you-need.pdf", paper_id: paper.paper_id, ready: ["skim"] },
     { filename: "bert.pdf", paper_id: "b".repeat(64), ready: [] },
@@ -873,7 +903,9 @@ describe("opening a cited work (2.11)", () => {
     await waitFor(() => expect(api.fetchCitedText).toHaveBeenCalledWith(paper.paper_id, "r001"));
     await userEvent.click(within(pane).getByRole("button", { name: "[2]" }));
     await waitFor(() => expect(api.fetchCitedText).toHaveBeenCalledWith(paper.paper_id, "r002"));
-    expect(within(pane).getByRole("button", { name: "[2]" })).toHaveAttribute(
+    // Each cited work gets a fresh pane (its own tab, chat and highlight).
+    const switched = screen.getByRole("complementary", { name: "Cited work" });
+    expect(within(switched).getByRole("button", { name: "[2]" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -1007,5 +1039,117 @@ describe("landing on the cited passage (2.12)", () => {
     await userEvent.click(await screen.findByRole("button", { name: "cite 7" }));
     await screen.findByText(/could not be found/);
     expect(api.localizeCitation).not.toHaveBeenCalled();
+  });
+});
+
+describe("asking about the cited work, and its impact (3.7)", () => {
+  beforeEach(() => {
+    api.fetchCitations.mockResolvedValue(citationMap);
+  });
+
+  async function openTab(name) {
+    await openSamplePaper();
+    await userEvent.click(await screen.findByRole("button", { name: "cite 7" }));
+    const pane = await screen.findByRole("complementary", { name: "Cited work" });
+    await userEvent.click(await within(pane).findByRole("tab", { name }));
+    return pane;
+  }
+
+  const citedViewer = () =>
+    screen
+      .getAllByTestId("pdf-viewer-stub")
+      .find((v) => v.dataset.fileUrl.includes("c".repeat(64)));
+
+  it("answers a suggested question with its quote", async () => {
+    const pane = await openTab("Ask");
+    await userEvent.click(
+      within(pane).getByRole("button", { name: "What is this citation referring to?" }),
+    );
+    expect(api.askCitation).toHaveBeenCalledWith(
+      paper.paper_id,
+      "c0000",
+      "What is this citation referring to?",
+    );
+    expect(await within(pane).findByText("It aligns while translating.")).toBeInTheDocument();
+    expect(
+      within(pane).getByRole("button", { name: /Show in the paper: align and translate jointly/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("highlights a quote's passage in the cited PDF when clicked", async () => {
+    api.localizeCitation.mockResolvedValue({
+      ...localization,
+      results: [localization.results[1]], // the candidate is a different passage
+    });
+    const pane = await openTab("Ask");
+    await waitFor(() => expect(citedViewer().dataset.highlightIds).toBe("s00012"));
+    await userEvent.type(within(pane).getByRole("textbox"), "How does it align?");
+    await userEvent.click(within(pane).getByRole("button", { name: "Ask" }));
+    await userEvent.click(
+      await within(pane).findByRole("button", { name: /Show in the paper/ }),
+    );
+    await waitFor(() => expect(citedViewer().dataset.highlightIds).toBe("s00040"));
+    expect(citedViewer().dataset.scrollPage).toBe("2");
+    // Choosing a candidate again hands the highlight back to it.
+    await userEvent.click(within(pane).getByRole("tab", { name: "Where it points" }));
+    await userEvent.click(within(pane).getByRole("button", { name: /Encoders compress/ }));
+    await waitFor(() => expect(citedViewer().dataset.highlightIds).toBe("s00012"));
+  });
+
+  it("shows an insufficient answer and its caveat as an answer, not an error", async () => {
+    api.askCitation.mockResolvedValue({
+      ...groundedAnswer,
+      status: "insufficient",
+      claims: [],
+      caveats: ["The passages retrieved from this paper do not answer the question."],
+    });
+    const pane = await openTab("Ask");
+    await userEvent.type(within(pane).getByRole("textbox"), "Capital of France?");
+    await userEvent.click(within(pane).getByRole("button", { name: "Ask" }));
+    expect(await within(pane).findByText(/does not answer that/)).toBeInTheDocument();
+    expect(within(pane).getByText(/do not answer the question/)).toBeInTheDocument();
+    expect(within(pane).queryByRole("alert")).toBeNull();
+  });
+
+  it("reports a refused question, such as an exhausted budget", async () => {
+    api.askCitation.mockRejectedValue(new Error("You've asked 10 new questions today"));
+    const pane = await openTab("Ask");
+    await userEvent.type(within(pane).getByRole("textbox"), "Anything?");
+    await userEvent.click(within(pane).getByRole("button", { name: "Ask" }));
+    expect(await within(pane).findByRole("alert")).toHaveTextContent("10 new questions");
+  });
+
+  it("will not send an empty question", async () => {
+    const pane = await openTab("Ask");
+    expect(within(pane).getByRole("button", { name: "Ask" })).toBeDisabled();
+  });
+
+  it("shows both databases' counts and how this paper uses the work", async () => {
+    const pane = await openTab("Impact");
+    expect(api.fetchBibliometrics).toHaveBeenCalledWith(paper.paper_id, "r007");
+    expect(await within(pane).findByText(/Cited 5× in this paper/)).toBeInTheDocument();
+    expect(within(pane).getByText("Semantic Scholar")).toBeInTheDocument();
+    expect(within(pane).getByText("30,818")).toBeInTheDocument();
+    expect(within(pane).getByText("OpenAlex")).toBeInTheDocument();
+    expect(within(pane).getByText(/top 1% most-cited/)).toBeInTheDocument();
+  });
+
+  it("marks the year in progress in the chart and its table", async () => {
+    const pane = await openTab("Impact");
+    expect(await within(pane).findByText(/2026 \(so far\)/)).toBeInTheDocument();
+    expect(within(pane).getByText("2026: 1,233 citations (year in progress)")).toBeInTheDocument();
+  });
+
+  it("still shows the impact of a paper with no text", async () => {
+    api.fetchCitedText.mockResolvedValue({
+      ...fullTextCited,
+      source: "unavailable",
+      cited_paper_id: null,
+    });
+    await openSamplePaper();
+    await userEvent.click(await screen.findByRole("button", { name: "cite 7" }));
+    const pane = await screen.findByRole("complementary", { name: "Cited work" });
+    expect(await within(pane).findAllByRole("tab")).toHaveLength(1);
+    expect(await within(pane).findByText(/Cited 5× in this paper/)).toBeInTheDocument();
   });
 });

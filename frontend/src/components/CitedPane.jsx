@@ -11,10 +11,16 @@
  * top answer is called a likely match only when the localizer says it clearly
  * leads (2.7): even then it is right about a third of the time, so it is never
  * presented as certain.
+ *
+ * Above the PDF, three tabs (3.7): where the citation points; ask about the
+ * paper, with answers whose quotes highlight their passage when clicked; and
+ * the work's impact. A paper with no text still shows its impact.
  */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
+import CitedChat from "./CitedChat.jsx";
+import CitedImpact from "./CitedImpact.jsx";
 import PdfViewer from "./PdfViewer.jsx";
 import { anchorLabel } from "../lib/citations.js";
 import {
@@ -32,28 +38,98 @@ function hostOf(url) {
   }
 }
 
-export default function CitedPane({ bridge, pdfUrl, onClose, onPick, onChoose }) {
+const TABS = [
+  { id: "where", label: "Where it points" },
+  { id: "ask", label: "Ask" },
+  { id: "impact", label: "Impact" },
+];
+
+export default function CitedPane({
+  bridge,
+  citingPaperId,
+  pdfUrl,
+  onClose,
+  onPick,
+  onChoose,
+}) {
   const { group, index, status, cited, error, loc } = bridge;
+  const anchor = group.anchors[index];
+  const [tab, setTab] = useState("where");
+  // A passage a chat answer quoted (3.7); while set, it is what is highlighted.
+  const [evidence, setEvidence] = useState(null);
+
   const results = loc?.status === "ready" ? loc.result.results : [];
   const chosenPassage =
     loc?.status === "ready" && loc.chosen !== null ? results[loc.chosen]?.passage : null;
+  const shownPassage = evidence ?? chosenPassage;
 
-  // Recomputed only when the choice changes: a new scroll request each render
-  // would keep yanking the reader back to the passage.
+  // Recomputed only when the passage changes: a new scroll request each render
+  // would keep yanking the reader back to it.
   const highlight = useMemo(
-    () => passageSentences(loc?.citedPaper, chosenPassage),
-    [loc?.citedPaper, chosenPassage],
+    () => passageSentences(loc?.citedPaper, shownPassage),
+    [loc?.citedPaper, shownPassage],
   );
   const scrollTo = useMemo(() => scrollTarget(highlight), [highlight]);
-  const anchor = group.anchors[index];
   const title = cited?.title ?? `Cited work ${anchorLabel(anchor)}`;
+  const hasText = status === "ready" && cited.source !== "unavailable";
+  const tabs = hasText ? TABS : TABS.filter((t) => t.id === "impact");
+  const activeTab = tabs.some((t) => t.id === tab) ? tab : tabs[0].id;
+
+  const choose = (i) => {
+    setEvidence(null);
+    onChoose(i);
+  };
+
+  const panel = status === "ready" && (
+    <>
+      <div className="cited__tabs" role="tablist" aria-label="About this cited work">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            id={`tab-${t.id}`}
+            aria-selected={activeTab === t.id}
+            aria-controls={`panel-${t.id}`}
+            className={`cited__tabbtn${activeTab === t.id ? " cited__tabbtn--active" : ""}`}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div
+        className="cited__panel"
+        role="tabpanel"
+        id={`panel-${activeTab}`}
+        aria-labelledby={`tab-${activeTab}`}
+      >
+        {activeTab === "where" && (
+          <Candidates loc={loc} results={results} onChoose={choose} />
+        )}
+        {activeTab === "ask" && (
+          <CitedChat
+            paperId={citingPaperId}
+            anchorId={anchor.id}
+            focusedPassageId={evidence?.id}
+            onFocusPassage={setEvidence}
+          />
+        )}
+        {activeTab === "impact" && (
+          <CitedImpact paperId={citingPaperId} referenceId={anchor.reference_id} />
+        )}
+      </div>
+    </>
+  );
 
   return (
     <aside className="cited" aria-label="Cited work">
       <header className="cited__header">
         <div className="cited__heading">
           <p className="cited__kicker">Cited work {anchorLabel(anchor)}</p>
-          <h2 className="cited__title">{status === "loading" ? "Finding the cited paper…" : title}</h2>
+          <h2 className="cited__title">
+            {status === "loading" ? "Finding the cited paper…" : title}
+          </h2>
         </div>
         <button
           type="button"
@@ -100,7 +176,7 @@ export default function CitedPane({ bridge, pdfUrl, onClose, onPick, onChoose })
             Full text
             {hostOf(cited.fetched_from) && <> from {hostOf(cited.fetched_from)}</>}
           </p>
-          <Candidates loc={loc} results={results} onChoose={onChoose} />
+          {panel}
           <PdfViewer
             fileUrl={pdfUrl(cited.cited_paper_id)}
             highlightSentences={highlight}
@@ -111,24 +187,27 @@ export default function CitedPane({ bridge, pdfUrl, onClose, onPick, onChoose })
       )}
 
       {status === "ready" && cited.source === "abstract" && (
-        <div className="cited__body">
-          <p className="cited__notice">
-            Only the abstract is available for this paper
-            {cited.abstract_from === "openalex" ? " (via OpenAlex)" : ""}.
-          </p>
-          <Candidates loc={loc} results={results} onChoose={onChoose} />
-          <Abstract text={cited.abstract} passage={chosenPassage} />
-          <Reasons attempts={cited.attempts} summary="Why not the full text" />
-        </div>
+        <>
+          {panel}
+          <div className="cited__body">
+            <p className="cited__notice">
+              Only the abstract is available for this paper
+              {cited.abstract_from === "openalex" ? " (via OpenAlex)" : ""}.
+            </p>
+            <Abstract text={cited.abstract} passage={shownPassage} />
+            <Reasons attempts={cited.attempts} summary="Why not the full text" />
+          </div>
+        </>
       )}
 
       {status === "ready" && cited.source === "unavailable" && (
-        <div className="cited__body">
-          <p className="cited__notice">
-            The text of this paper could not be found.
-          </p>
-          <Reasons attempts={cited.attempts} summary="What was tried" open />
-        </div>
+        <>
+          <div className="cited__body">
+            <p className="cited__notice">The text of this paper could not be found.</p>
+            <Reasons attempts={cited.attempts} summary="What was tried" open />
+          </div>
+          {panel}
+        </>
       )}
     </aside>
   );

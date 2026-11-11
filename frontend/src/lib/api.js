@@ -199,3 +199,28 @@ export function localizeCitation(paperId, anchorId, k = 5) {
     { method: "POST" },
   );
 }
+
+/**
+ * Ask a question about a cited work, answered only from its text (3.4).
+ *
+ * The answer's `claims` each quote one of its `passages`; `status` is
+ * "answered", "insufficient" (the passages do not say) or "unavailable" (no
+ * text); `caveats` are plain sentences to show beside it (3.9).
+ */
+export function askCitation(paperId, anchorId, question) {
+  return request(
+    `${BASE}/papers/${paperId}/citations/${encodeURIComponent(anchorId)}/ask`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question }),
+    },
+  );
+}
+
+/** A cited work's citation counts, yearly trend and use in this paper (3.5). */
+export function fetchBibliometrics(paperId, referenceId) {
+  return request(
+    `${BASE}/papers/${paperId}/references/${encodeURIComponent(referenceId)}/bibliometrics`,
+  );
+}

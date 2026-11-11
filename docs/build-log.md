@@ -687,6 +687,22 @@ choice was reversed on reflection: dropping the four duplicate test texts would 
 test set 1,857 rows against the published 1,861, and a comparison is only fair on the same
 rows — splits now load as released, with de-duplication opt-in for prompt development.
 
+## Task 3.7 — the chat panel
+
+The tools (3.4, 3.5) become three tabs in the cited-work pane: where the citation points,
+ask about the paper, and its impact. Each answer statement shows the words it quotes, and
+the quote is the button: clicking it highlights that passage in the cited PDF, so checking
+a claim costs one click. Two details:
+
+- **Passage finding and the cited parse were fetched together**, so a server without the
+  embedding model (503) lost the parse too — and with it the ability to show any quoted
+  passage. They now settle independently.
+- **A pane per cited work.** The tab, the conversation and the highlighted quote belong to
+  one cited paper; switching works remounts the pane rather than carrying them over.
+
+The citations-per-year chart is one series in one validated hue, with the year in progress
+hatched and labelled "so far" — otherwise every chart would end in an apparent collapse.
+
 
 
 1. **Unit tests caught the logic; only a live run caught the damage.** Every bug in B and C
