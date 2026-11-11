@@ -659,6 +659,23 @@ a planted instruction still produces no answer, because what it says cannot quot
 paper. There is no confidence score: 2.7 found retrieval scores a poor signal, and a
 threshold nobody measured would overstate what is known.
 
+## Task 3.5 — bibliometrics
+
+No model in it — only counted facts, each from where it is known. Two choices:
+
+- **Two databases, two numbers.** Semantic Scholar and OpenAlex index different literature
+  and disagree (Attention: 202k vs 136k; Bahdanau: 30.8k vs 26.0k). Averaging would invent
+  a number neither source reports, so both are shown with their source.
+- **Counts go stale; titles do not.** The Semantic Scholar cache kept every response
+  forever — right for resolution, wrong for a citation count. Both clients gained a
+  `fresh` option, and counts get their own 30-day cache.
+
+Two data quirks are surfaced rather than smoothed: OpenAlex dates a few citations before a
+paper existed (excluded from the trend, with a note), and the current year is flagged as
+partial so a chart does not show it as a collapse. The most telling number is our own: how
+often, and where, the citing paper uses the work — Attention cites Bahdanau five times
+across four sections, LSTM once in its introduction.
+
 
 
 1. **Unit tests caught the logic; only a live run caught the damage.** Every bug in B and C
