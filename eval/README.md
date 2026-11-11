@@ -8,9 +8,9 @@ Evaluation harnesses, one per measured capability. Nothing runs until real data 
   Needs the corpus in `data/raw/scisumm-corpus` (see `clscisumm.py`). Aggregate results are
   committed in `localization/results/`; per-citance predictions go to `data/raw/` (ignored).
   Tests: `backend/.venv/bin/python -m pytest eval`.
-- `intent/` — SciCite. Data prep (3.1): `backend/.venv/bin/python eval/intent/scicite.py`
+- `intent/` — SciCite citation-intent classification (Phase 3). Data prep (3.1): `backend/.venv/bin/python eval/intent/scicite.py`
   prints the audit; needs the release in `data/raw/scicite` (see `scicite.py`). Classifier
-  evaluation is 3.2. Original note: citation-intent classification (Phase 3).
+  evaluation is 3.2.
 - `chat_faithfulness/` — RAGAS-style groundedness/faithfulness for the agentic chat (Phase 3).
 
 Each subfolder has a `run_*.py` stub: it defines the expected input/output contract now so
