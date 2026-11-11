@@ -648,6 +648,17 @@ claimed away.
 - The question budget is charged just before the model is called, so asking about a paper
   with no text costs nothing; answers are cached by question, failures never.
 
+## Task 3.9 — saying how sure, and refusing
+
+Refusal was already structural (3.4): no checked claim, no answer. What was missing was
+telling the reader *why* to be careful, so every answer now carries plain caveats —
+abstract only, part of the answer removed and how much, the passages do not answer the
+question, or the paper could not be found. Cited passages are third-party PDF text; the
+model is told they are data, never instructions, and a test confirms that a model obeying
+a planted instruction still produces no answer, because what it says cannot quote the
+paper. There is no confidence score: 2.7 found retrieval scores a poor signal, and a
+threshold nobody measured would overstate what is known.
+
 
 
 1. **Unit tests caught the logic; only a live run caught the damage.** Every bug in B and C

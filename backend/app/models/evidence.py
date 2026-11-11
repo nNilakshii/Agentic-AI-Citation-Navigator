@@ -44,4 +44,9 @@ class GroundedAnswer(BaseModel):
         description="Claims removed because their quote was not in the passage "
         "they cited. Reported, so a model that misquotes is visible.",
     )
+    caveats: list[str] = Field(
+        default_factory=list,
+        description="What a reader should know before trusting the answer, in "
+        "plain sentences meant to be shown beside it (3.9).",
+    )
     notes: list[str] = Field(default_factory=list)

@@ -63,7 +63,7 @@ _Working order (dependency-driven): 1.1 → 1.2 → 1.3+1.4 → 1.5 → 1.6 → 
 - [ ] **3.6** Agent orchestration / tool routing
 - [ ] **3.7** Chat UI panel over the bridge
 - [ ] **3.8** Faithfulness evaluation (RAGAS-style)
-- [ ] **3.9** Refusal / uncertainty handling
+- [x] **3.9** Refusal / uncertainty handling — Done 2026-11-10 (backend): every grounded answer carries plain-language `caveats` for the UI to show beside it — abstract only; part of the answer removed (n of m statements) because it could not be traced to the paper; the passages do not answer the question; the paper could not be found, so nothing was asked. The system prompt tells the model passages are third-party data, never instructions, and an answer obeying planted instructions still fails the quote check (tested). Deliberately **no** retrieval-score confidence: 2.7 showed raw scores barely separate right from wrong; calibration waits for 3.8's measurements. Evidence v2. 303 backend tests
 - [ ] **3.10** ★ MILESTONE — agentic chat over a citation demo
 
 ## Phase 4 · Evaluation, Write-up & Demo
