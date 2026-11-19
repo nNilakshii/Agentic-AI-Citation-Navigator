@@ -703,6 +703,56 @@ a claim costs one click. Two details:
 The citations-per-year chart is one series in one validated hue, with the year in progress
 hatched and labelled "so far" — otherwise every chart would end in an apparent collapse.
 
+## Task 2.10 — why the localizer misses
+
+`eval/localization/analyze_failures.py` puts every miss of the served hybrid in exactly one
+bucket, checked in priority order, and records why it happened. Dev (245 misses of 313),
+with test (339 of 440) in brackets:
+
+| Bucket | Share of misses | What would fix it |
+| --- | --- | --- |
+| Unreachable: the gold was filtered out by 2.4 | 0.8% (1.2%) | Passage segmentation |
+| Adjacent: within 2 sentences of the gold | 3.7% (5.3%) | Window boundaries |
+| Ranked lower: the gold is in the top 5, not first | 35.1% (37.8%) | A re-ranker (2.8, 2.9) |
+| Same section, further away | 16.7% (9.1%) | Re-ranking deeper |
+| Elsewhere in the paper | 43.7% (46.6%) | See the hand-read sample |
+
+**Word overlap explains most misses.** Median share of the citance's content words found in
+the gold text: 0.22 for hits and 0.14 for misses on dev (0.31 and 0.13 on test). When under
+a fifth of the words match, which is 64% of dev citances, acc@1 is 15% (test 8%); above it
+34% (test 43%). In 80% of misses the wrong top passage shares more of the citance's words
+than the gold does: the ranker followed the words, and the words pointed elsewhere. Larger
+gold spans are easier (acc@1 18% for one sentence, 38% for four or more), since there are
+more ways to land in them.
+
+**30 dev misses read by hand** (seed 0, all buckets):
+
+| Reason | Misses | Example |
+| --- | --- | --- |
+| Top passage is a plausible answer too | 11 | Gold in the Introduction; the Conclusion says the same thing |
+| Vague citance: the citation names the whole paper, gold is its contribution sentence | 8 | "Sentences should be translated in consistence with their topics" |
+| Paraphrase: a concept match, few shared words | 8 | "non-concatenative morphology" vs "Semitic roots and patterns" |
+| PDF-extraction noise in the citance or the gold | 2 | Table text spliced into the citing sentence |
+| The gold looks unrelated to the citance | 1 | A training-size claim annotated to a model-architecture sentence |
+
+What follows:
+
+- **Segmentation and windows are not the bottleneck** (under 7% together), so they stay as
+  they are.
+- **A re-ranker has room to work.** Over a third of misses already have the gold in the
+  top 5, and the paraphrase cases need meaning rather than word overlap. 2.8 should re-rank
+  the hybrid's top 10 to 20; a perfect re-ordering of the top 5 alone would lift test acc@1
+  from 23.0% to 54.3%.
+- **A third of the sampled "misses" may not be wrong.** One gold set per citance undercounts
+  plausible alternatives. The app's candidate list and "None of these" already hedge this;
+  the write-up should report acc@5 beside acc@1.
+- **Vague citances cannot be localized, only recognised.** About a quarter of the sample cites
+  the paper as a whole. That is a job for citation intent (3.2, mostly "background") and for
+  the existing `clear_match` flag, not for a better ranker.
+
+Only aggregate counts are committed (`results/failures-*.json`); the sample holds corpus text
+and stays in `data/raw/`.
+
 
 
 1. **Unit tests caught the logic; only a live run caught the damage.** Every bug in B and C

@@ -1,0 +1,57 @@
+{
+  "tag": "hybrid-all-MiniLM-L6-v2-a0.7",
+  "split": "test",
+  "citances": 440,
+  "misses": 339,
+  "buckets": {
+    "unreachable": {
+      "n": 4,
+      "share_of_misses": 0.011799410029498525
+    },
+    "adjacent": {
+      "n": 18,
+      "share_of_misses": 0.05309734513274336
+    },
+    "ranked-lower": {
+      "n": 128,
+      "share_of_misses": 0.3775811209439528
+    },
+    "same-section": {
+      "n": 31,
+      "share_of_misses": 0.09144542772861357
+    },
+    "elsewhere": {
+      "n": 158,
+      "share_of_misses": 0.46607669616519176
+    }
+  },
+  "by_support": {
+    "< 0.2": {
+      "n": 248,
+      "acc_at_1": 0.07661290322580645
+    },
+    ">= 0.2": {
+      "n": 192,
+      "acc_at_1": 0.4270833333333333
+    }
+  },
+  "by_gold_size": {
+    "1": {
+      "n": 294,
+      "acc_at_1": 0.17346938775510204
+    },
+    "2-3": {
+      "n": 134,
+      "acc_at_1": 0.3283582089552239
+    },
+    "4+": {
+      "n": 12,
+      "acc_at_1": 0.5
+    }
+  },
+  "misses_with_distractor": 0.7699115044247787,
+  "median_support": {
+    "hits": 0.3090909090909091,
+    "misses": 0.13333333333333333
+  }
+}
