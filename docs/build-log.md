@@ -753,6 +753,44 @@ What follows:
 Only aggregate counts are committed (`results/failures-*.json`); the sample holds corpus text
 and stays in `data/raw/`.
 
+## Task 2.8 — an LLM re-ranks the shortlist
+
+`app/core/llm_localizer.py`: the hybrid's best 15 passages go to Gemini, numbered; it returns
+up to five numbers, best first, whether any passage fits, and how sure it is. Numbers only,
+as in 1.6: unknown or repeated ones are dropped and counted, and every passage it skipped
+keeps its hybrid place behind the ones it picked, so a bad reply can reorder the list but
+never empty it. The harness gained a re-rank hook (`--rerank llm`), so the LLM is scored on
+exactly 2.7's candidates by exactly 2.7's code.
+
+Three variants on dev, the winner run once on test:
+
+| Ranker | Dev F1 | Dev acc@1 | Test F1 | Test acc@1 | Test acc@5 |
+| --- | --- | --- | --- | --- | --- |
+| Hybrid BM25 + MiniLM (served) | 0.182 | 21.7% | 0.166 | 23.0% | 54.3% |
+| + Gemini re-rank, no thinking | 0.204 | 28.1% | | | |
+| + Gemini re-rank, shortlist 25, thinking | 0.223 | 30.7% | | | |
+| **+ Gemini re-rank, shortlist 15, thinking (1,024 tokens)** | **0.226** | **31.6%** | **0.217** | **34.3%** | **64.3%** |
+
+- **The gain is not chance.** On the same test citances, the re-ranker fixed 77 the hybrid
+  missed and broke 28 it had right (exact McNemar p ≈ 2×10⁻⁶; dev 48 vs 17, p ≈ 1.5×10⁻⁴).
+- **It helps where 2.10 said words fail.** Citances sharing under a fifth of their words
+  with the gold: acc@1 8% → 20% on test. Above that: 43% → 53%.
+- **Thinking was worth it; a longer shortlist was not** (30.7% vs 31.6% is within noise
+  on 313 citances, at two-thirds more prompt).
+- **Its confidence is a weak signal, not a calibrated one.** It says "high" for 91% of test
+  citances (right 37% of the time); the other 9% are right 10% of the time. "Nothing fits"
+  flags 6%, right 19%. Useful for saying "not sure", not for saying "sure". Without
+  thinking it said "high" to almost everything.
+- **A quirk worth knowing:** 13 test citance keys repeat in the corpus, so the paired test
+  covers 427 unique keys, not 440.
+- **The SDK's async client is bound to its event loop.** `asyncio.run` per paper failed from
+  the second paper on ("Event loop is closed"); the harness keeps one loop for the run.
+- **The cache key includes the thinking budget.** Without it, the thinking run would have
+  silently reused the non-thinking replies.
+
+The app still serves the hybrid: the re-ranker is an LLM call on every citation click,
+so serving it is a budget decision, not a code change. About 1,400 calls in all.
+
 
 
 1. **Unit tests caught the logic; only a live run caught the damage.** Every bug in B and C

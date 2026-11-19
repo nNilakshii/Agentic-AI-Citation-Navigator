@@ -1,0 +1,57 @@
+{
+  "tag": "hybrid-all-MiniLM-L6-v2-a0.7-rerank-gemini-3.6-flash-think1024",
+  "split": "test",
+  "citances": 440,
+  "misses": 289,
+  "buckets": {
+    "unreachable": {
+      "n": 4,
+      "share_of_misses": 0.01384083044982699
+    },
+    "adjacent": {
+      "n": 15,
+      "share_of_misses": 0.05190311418685121
+    },
+    "ranked-lower": {
+      "n": 123,
+      "share_of_misses": 0.42560553633217996
+    },
+    "same-section": {
+      "n": 30,
+      "share_of_misses": 0.10380622837370242
+    },
+    "elsewhere": {
+      "n": 117,
+      "share_of_misses": 0.40484429065743943
+    }
+  },
+  "by_support": {
+    "< 0.2": {
+      "n": 248,
+      "acc_at_1": 0.1975806451612903
+    },
+    ">= 0.2": {
+      "n": 192,
+      "acc_at_1": 0.53125
+    }
+  },
+  "by_gold_size": {
+    "1": {
+      "n": 294,
+      "acc_at_1": 0.2789115646258503
+    },
+    "2-3": {
+      "n": 134,
+      "acc_at_1": 0.47761194029850745
+    },
+    "4+": {
+      "n": 12,
+      "acc_at_1": 0.4166666666666667
+    }
+  },
+  "misses_with_distractor": 0.7162629757785467,
+  "median_support": {
+    "hits": 0.25,
+    "misses": 0.11764705882352941
+  }
+}

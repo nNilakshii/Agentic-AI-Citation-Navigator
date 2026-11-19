@@ -7,6 +7,8 @@ Evaluation harnesses, one per measured capability. Nothing runs until real data 
   `backend/.venv/bin/python eval/localization/run_clscisumm_eval.py [--split dev|test] [--ranker random] [--save]`.
   Needs the corpus in `data/raw/scisumm-corpus` (see `clscisumm.py`). Aggregate results are
   committed in `localization/results/`; per-citance predictions go to `data/raw/` (ignored).
+  LLM re-rank (2.8): add `--ranker hybrid --alpha 0.7 --rerank llm` (Gemini key needed; set
+  `LLM_THINKING_BUDGET=1024` for the reported config); replies cached in `data/raw/llm-rerank-cache/`.
   Failure taxonomy (2.10): `analyze_failures.py <tag> --split dev [--sample 30] [--save]`
   reads those predictions and buckets every miss.
   Tests: `backend/.venv/bin/python -m pytest eval`.
