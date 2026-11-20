@@ -820,3 +820,46 @@ so serving it is a budget decision, not a code change. About 1,400 calls in all.
 9. **Read *which* limit an API names.** Four tasks were designed against a 5-per-minute
    limit that was never the binding one. A rate limit and a daily quota are the same 429
    at the call site and want opposite responses.
+
+## Task 3.2 — why a paper cites another
+
+`app/core/intent.py` labels a citation background, method or result — SciCite's three
+intents — by asking Gemini to pick one from a closed list. As everywhere in the project the
+model cannot add anything: a label outside the list is scored as *invalid* (wrong for its
+gold class, a false positive for none), never mapped to the nearest guess. There were none.
+
+**Choosing the prompt on dev, scoring test once.** Four variants on all 916 dev rows, text
+only (macro-F1):
+
+| Prompt | Dev macro-F1 |
+|---|---|
+| v1 — SciCite's written definitions ("the citing paper *uses* a method…") | 0.779 |
+| v2 — the definitions as the data is labelled | 0.789 |
+| v2 + 1,024 thinking tokens | 0.780 |
+| **v3 — v2 + six worked examples** | **0.793** |
+
+Two things learned on the way. On a 200-row sample, v1's biggest error was calling "method"
+citations "background" (16 of 56), and reading them showed why: SciCite's annotators labelled
+a citation "method" when it merely *describes* a method ("X [6] proposed the auxiliary
+particle filter…"), not only when the citing paper uses it — the written definition and
+the labels disagree, and the labels are what is scored. And all the variants sit within
+0.015 of each other: a plateau, so the choice matters little. Adding the section name
+("Methods", "Results") made the sample slightly *worse* under both prompts, and is left out,
+as in SciCite's own text-only baseline. The worked examples in v3 were written for this
+project: SciCite's text is third-party data and stays out of the repo.
+
+**Test (1,861 rows, as released, run once): macro-F1 0.835, accuracy 84.6%.** Per class F1:
+background 0.87, method 0.83, result 0.81. For scale, the SciCite paper's best model, trained
+on its 8,243 training rows, reports 84.0, and fine-tuned SciBERT 85.5 — so a prompt with no
+training matches the trained baseline and trails the strongest by about one point. (Test
+scoring higher than dev is consistent across published SciCite results too; dev was used only
+to choose.) The remaining errors are mostly method ↔ background (109 method called
+background, 74 the reverse), the boundary the annotation itself blurs.
+
+The model's stated confidence is no signal: "high" on 98% of rows. As in 2.8, a calibrated
+"not sure" will have to come from elsewhere.
+
+~5,000 Gemini calls in all, cached in `data/raw/intent-cache/`. Not yet used by the chat:
+routing on intent (a "method" citation suggests "what exactly did they take?") is 3.6. 3.3, a
+fine-tuned SciBERT, would now have to beat 0.835 to be worth its training.
+

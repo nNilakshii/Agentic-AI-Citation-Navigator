@@ -13,8 +13,11 @@ Evaluation harnesses, one per measured capability. Nothing runs until real data 
   reads those predictions and buckets every miss.
   Tests: `backend/.venv/bin/python -m pytest eval`.
 - `intent/` — SciCite citation-intent classification (Phase 3). Data prep (3.1): `backend/.venv/bin/python eval/intent/scicite.py`
-  prints the audit; needs the release in `data/raw/scicite` (see `scicite.py`). Classifier
-  evaluation is 3.2.
+  prints the audit; needs the release in `data/raw/scicite` (see `scicite.py`). LLM classifier
+  (3.2): `backend/.venv/bin/python eval/intent/run_scicite_eval.py --split dev --no-section
+  [--sample 200] [--prompt-version N]`; test once with `--split test --no-section --save`.
+  Gemini key needed; replies cached in `data/raw/intent-cache/`, per-row predictions in
+  `data/raw/intent-predictions/`, aggregate results in `intent/results/`.
 - `chat_faithfulness/` — RAGAS-style groundedness/faithfulness for the agentic chat (Phase 3).
 
 Each subfolder has a `run_*.py` stub: it defines the expected input/output contract now so

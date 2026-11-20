@@ -1,0 +1,69 @@
+{
+  "split": "test",
+  "sample": null,
+  "rows": 1861,
+  "failed_calls": 0,
+  "model": "gemini-3.6-flash",
+  "thinking_budget": 0,
+  "intent_version": "3",
+  "uses_section": false,
+  "n": 1861,
+  "accuracy": 0.84631918323482,
+  "macro_f1": 0.8347612938957107,
+  "per_class": {
+    "background": {
+      "precision": 0.8536585365853658,
+      "recall": 0.8776328986960883,
+      "f1": 0.8654797230464886,
+      "support": 997
+    },
+    "method": {
+      "precision": 0.8655913978494624,
+      "recall": 0.7983471074380165,
+      "f1": 0.8306104901117798,
+      "support": 605
+    },
+    "result": {
+      "precision": 0.7805755395683454,
+      "recall": 0.8378378378378378,
+      "f1": 0.8081936685288641,
+      "support": 259
+    }
+  },
+  "invalid": 0,
+  "confusion": {
+    "background": {
+      "background": 875,
+      "method": 74,
+      "result": 48,
+      "invalid": 0
+    },
+    "method": {
+      "background": 109,
+      "method": 483,
+      "result": 13,
+      "invalid": 0
+    },
+    "result": {
+      "background": 41,
+      "method": 1,
+      "result": 217,
+      "invalid": 0
+    }
+  },
+  "by_confidence": {
+    "high": {
+      "n": 1829,
+      "accuracy": 0.8518316019682887
+    },
+    "medium": {
+      "n": 26,
+      "accuracy": 0.5
+    },
+    "low": {
+      "n": 6,
+      "accuracy": 0.6666666666666666
+    }
+  },
+  "from_cache": 4
+}
