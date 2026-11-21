@@ -218,6 +218,25 @@ export function askCitation(paperId, anchorId, question) {
   );
 }
 
+/**
+ * Ask anything about a citation; the agent picks the tools (3.6).
+ *
+ * `route` lists the tools run, most important first; each has its own part
+ * (`evidence` is an `askCitation` answer, `location` a `localizeCitation`
+ * result, `intent` a label, `impact` a `fetchBibliometrics` result) and
+ * `errors` says, per tool, why it could not answer. There is no combined text.
+ */
+export function chatCitation(paperId, anchorId, question) {
+  return request(
+    `${BASE}/papers/${paperId}/citations/${encodeURIComponent(anchorId)}/chat`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question }),
+    },
+  );
+}
+
 /** A cited work's citation counts, yearly trend and use in this paper (3.5). */
 export function fetchBibliometrics(paperId, referenceId) {
   return request(

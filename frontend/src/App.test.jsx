@@ -101,6 +101,18 @@ const groundedAnswer = {
   dropped_claims: 0,
   notes: [],
 };
+const chatAnswer = (parts = {}) => ({
+  question: "q",
+  route: ["evidence"],
+  routed_by: "llm",
+  route_notes: [],
+  evidence: groundedAnswer,
+  location: null,
+  intent: null,
+  impact: null,
+  errors: {},
+  ...parts,
+});
 const bibliometrics = {
   reference_id: "r007",
   counts: [
@@ -139,7 +151,7 @@ beforeEach(() => {
   api.fetchCitedText.mockResolvedValue(fullTextCited);
   api.localizeCitation.mockResolvedValue(localization);
   api.getPaper.mockResolvedValue(citedPaper);
-  api.askCitation.mockResolvedValue(groundedAnswer);
+  api.chatCitation.mockResolvedValue(chatAnswer());
   api.fetchBibliometrics.mockResolvedValue(bibliometrics);
   api.fetchCoverage.mockResolvedValue([
     { filename: "attention-is-all-you-need.pdf", paper_id: paper.paper_id, ready: ["skim"] },
@@ -1063,13 +1075,14 @@ describe("asking about the cited work, and its impact (3.7)", () => {
   it("answers a suggested question with its quote", async () => {
     const pane = await openTab("Ask");
     await userEvent.click(
-      within(pane).getByRole("button", { name: "What is this citation referring to?" }),
+      within(pane).getByRole("button", { name: "What does this paper propose?" }),
     );
-    expect(api.askCitation).toHaveBeenCalledWith(
+    expect(api.chatCitation).toHaveBeenCalledWith(
       paper.paper_id,
       "c0000",
-      "What is this citation referring to?",
+      "What does this paper propose?",
     );
+    expect(within(pane).getByText("Answered from the paper's text")).toBeInTheDocument();
     expect(await within(pane).findByText("It aligns while translating.")).toBeInTheDocument();
     expect(
       within(pane).getByRole("button", { name: /Show in the paper: align and translate jointly/ }),
@@ -1097,12 +1110,16 @@ describe("asking about the cited work, and its impact (3.7)", () => {
   });
 
   it("shows an insufficient answer and its caveat as an answer, not an error", async () => {
-    api.askCitation.mockResolvedValue({
-      ...groundedAnswer,
-      status: "insufficient",
-      claims: [],
-      caveats: ["The passages retrieved from this paper do not answer the question."],
-    });
+    api.chatCitation.mockResolvedValue(
+      chatAnswer({
+        evidence: {
+          ...groundedAnswer,
+          status: "insufficient",
+          claims: [],
+          caveats: ["The passages retrieved from this paper do not answer the question."],
+        },
+      }),
+    );
     const pane = await openTab("Ask");
     await userEvent.type(within(pane).getByRole("textbox"), "Capital of France?");
     await userEvent.click(within(pane).getByRole("button", { name: "Ask" }));
@@ -1112,11 +1129,60 @@ describe("asking about the cited work, and its impact (3.7)", () => {
   });
 
   it("reports a refused question, such as an exhausted budget", async () => {
-    api.askCitation.mockRejectedValue(new Error("You've asked 10 new questions today"));
+    api.chatCitation.mockRejectedValue(new Error("You've asked 10 new questions today"));
     const pane = await openTab("Ask");
     await userEvent.type(within(pane).getByRole("textbox"), "Anything?");
     await userEvent.click(within(pane).getByRole("button", { name: "Ask" }));
     expect(await within(pane).findByRole("alert")).toHaveTextContent("10 new questions");
+  });
+
+  it("shows every part the agent routed to, in its order", async () => {
+    api.chatCitation.mockResolvedValue(
+      chatAnswer({
+        route: ["intent", "impact", "locate"],
+        evidence: null,
+        intent: { intent: "method", confidence: "high", citance: "We adopt it.", model: "m" },
+        impact: bibliometrics,
+        location: localization,
+      }),
+    );
+    const pane = await openTab("Ask");
+    await userEvent.type(within(pane).getByRole("textbox"), "Why cite it, and is it known?");
+    await userEvent.click(within(pane).getByRole("button", { name: "Ask" }));
+    expect(
+      await within(pane).findByText(
+        "Answered from why it is cited · citation databases · where the citation points",
+      ),
+    ).toBeInTheDocument();
+    expect(within(pane).getByText("Method")).toBeInTheDocument();
+    expect(within(pane).getByText(/right about 85% of the time/)).toBeInTheDocument();
+    expect(
+      within(pane).getByText(/30,818 times \(Semantic Scholar\), 26,032 times \(OpenAlex\)/),
+    ).toBeInTheDocument();
+    expect(within(pane).getByText(/This paper cites it 5×/)).toBeInTheDocument();
+    // The located passages are clickable, like quotes.
+    const located = within(pane).getAllByRole("button", { name: /Show in the paper: Encoders compress/ });
+    await userEvent.click(located[0]);
+    await waitFor(() => expect(citedViewer().dataset.highlightIds).toBe("s00012"));
+  });
+
+  it("says which tool could not answer, and still shows the others", async () => {
+    api.chatCitation.mockResolvedValue(
+      chatAnswer({
+        route: ["evidence", "impact"],
+        evidence: null,
+        impact: bibliometrics,
+        errors: { evidence: "Today's budget for questions is spent." },
+      }),
+    );
+    const pane = await openTab("Ask");
+    await userEvent.type(within(pane).getByRole("textbox"), "What did it find, is it known?");
+    await userEvent.click(within(pane).getByRole("button", { name: "Ask" }));
+    expect(
+      await within(pane).findByText(/Could not check the paper's text: Today's budget/),
+    ).toBeInTheDocument();
+    expect(within(pane).getByText(/30,818 times/)).toBeInTheDocument();
+    expect(within(pane).queryByRole("alert")).toBeNull();
   });
 
   it("will not send an empty question", async () => {

@@ -917,3 +917,87 @@ A regex bug caught by the tests: the "why cite" rule ended in a word boundary af
 so it never matched "cite". The panel (3.7) still calls `/ask`; moving it to `/chat` is
 3.10's milestone.
 
+## Task 3.8 — are the answers faithful to their quotes?
+
+3.4 checks that every quote is really in the passage it names. It cannot check that the
+*statement* beside the quote says no more than the passage does. 3.8 measures that.
+
+**Setup.** Every sample citation whose cited work we have in full text, up to three per
+paper: 19 citations (one sample had none). Three questions each, through the real `/ask`
+path with the app's own settings:
+- "What is the main contribution of the cited work?";
+- one specific question a model wrote from the *citing sentence only* (it never saw the
+  cited paper, so the question cannot leak its answer);
+- one off-topic question (clinical trials, crop varieties, …) that no computer-science
+  paper answers.
+
+Each surviving statement is judged against the passage it cites: *supported*, *partial* (the
+core is, a detail is not), *unsupported*. The judge is Gemini with 1,024 thinking tokens; the
+answers themselves are made without thinking, as served. (`GeminiClient` gained a per-client
+`thinking_budget` for this.)
+
+**The judge was tested before its numbers were used.** 60 statements it had called supported
+were rewritten by the model with exactly one planted error (a changed number, name or
+condition, or one added detail): it caught 98%. The quote itself, offered as the statement,
+is a control it must pass: 98%. And I read 17 of its verdicts myself (all 5 partials, 12
+random supported): agreed on 15. Both disagreements were the judge being too strict: it
+marked "inspired by the Cloze task" and "as a pretraining step" as unsupported, though both
+are in the passage — it seems to have checked them against the short quote rather than the
+passage. So the judge errs strict, and the score below is, if anything, low. Same model
+family as the answerer, so self-preference is possible; the planted-error test is the
+guard against it.
+
+**Results** (57 answers, 71 statements):
+
+| | |
+|---|---|
+| Statements fully supported by their passage | **93.0%** |
+| Partial / unsupported | 7.0% / **0%** |
+| Answers with every statement supported | 80% |
+| Quoted words alone enough to support the statement | 90.1% |
+| Statements dropped by 3.4's quote check | 0% |
+| Off-topic questions declined | **19 / 19** |
+
+The partials are small overreaches, of the "English-to-French" kind 3.4 found: naming a
+probe ("LAMA") the passage only describes, framing "a new approach" as "the main
+contribution", adding "directly captures global corpus statistics". No statement made a
+claim the passage did not support at its core.
+
+**The real weakness is recall.** A third of the *answerable* questions came back
+"insufficient" (contribution 32%, specific 37%). Reading them showed why: retrieval, not
+caution. For "What is the main contribution?", word matching pulls "Main Results" table
+captions, "a description of each author's contribution is in Appendix A", and reference-list
+fragments — never the abstract or the introduction that states the contribution. Shown
+those, declining is the right answer. The follow-up is clear and cheap: always offer the
+abstract (and the introduction's opening) alongside retrieved passages for overview
+questions — evidence v3, to be measured on this same harness so the change is a
+before/after, not a guess.
+
+A repeat of 2.8's bug cost one run: the harness called `asyncio.run` per stage, and the
+Gemini client stays bound to the first event loop. Stages 1–4 were cached, so the re-run
+after moving to one loop cost a few calls. The lesson from 2.8 was written down but not
+applied to new code — now it is in both harnesses' comments.
+
+## Task 3.10 — the agentic chat in the reader (milestone)
+
+The Ask tab now calls `/chat` instead of `/ask`. Each answer shows, in the agent's order,
+one part per tool it chose, under a line naming them ("Answered from why it is cited ·
+citation databases"):
+
+- **the paper's text** — statements with their quotes, clickable to highlight the passage
+  in the cited PDF, caveats beside them (unchanged from 3.7);
+- **why it is cited** — "Cited as **Method**: the citing paper uses or describes a method,
+  tool or dataset from it", with the plain note that such labels are right about 85% of the
+  time on a public benchmark (3.2) — the label is a model's reading, and says so;
+- **citation databases** — both counts with their source, and how often this paper cites
+  the work, pointing to the Impact tab for the trend;
+- **where it points** — up to three passages, clickable like quotes, headed "Likely match"
+  only when 2.7's `clear_match` holds.
+
+A tool that cannot answer (budget spent, no text, no reference link) shows "Could not check
+…: why" while the other parts still appear — the 3.6 design carried through to the screen.
+The suggested questions now cover the three kinds: content, intent, impact.
+
+Local only, like the rest of Phases 2–3: going public is one deploy job with 2.13 (the
+production image needs the embedding model for `evidence` and `locate`).
+
