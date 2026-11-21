@@ -26,7 +26,7 @@ from __future__ import annotations
 import re
 
 from app.cache import PaperStore
-from app.core.pdf_parser import PARSER_VERSION, parse_pdf
+from app.core.pdf_parser import PARSER_VERSION, paper_id_for, parse_pdf
 from app.models.cited import CitedText, TextSource
 from app.models.paper import ParsedPaper
 from app.core.resolution import _norm
@@ -136,6 +136,13 @@ def _try_pdfs(
         except DownloadError as exc:
             attempts.append(f"{url}: {exc.reason}")
             continue
+        # The same bytes may already be stored — a sample the reader opened, or
+        # a work fetched for another citation. Reuse it: re-parsing would
+        # overwrite its filename (3.8 found "bert.pdf" renamed "1810.04805.pdf").
+        existing = store.load_parsed(paper_id_for(data), PARSER_VERSION)
+        if existing is not None:
+            store.save_fetched(url, existing.paper_id)
+            return _full_text(base, existing, url, attempts)
         try:
             parsed = parse_pdf(data, _filename(item))
         except ValueError as exc:

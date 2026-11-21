@@ -645,3 +645,26 @@ def test_endpoint_fetches_and_404s(tmp_path, synthetic_pdf, monkeypatch):
         assert unknown.status_code == 404
     finally:
         app.dependency_overrides.clear()
+
+
+def test_a_paper_already_stored_is_reused_not_overwritten(tmp_path, synthetic_pdf):
+    # A sample the reader opened can also be a cited work: the same bytes.
+    # Fetching it must not re-save it under the download's filename (3.8).
+    from app.core.pdf_parser import parse_pdf
+
+    store = PaperStore(tmp_path)
+    sample = parse_pdf(synthetic_pdf, "friendly-name.pdf")
+    store.save_parsed(sample)
+    res = resolution(s2_paper_id="s", arxiv_id="2001.00001")
+    result = fetch_cited_text(
+        CITING,
+        "r001",
+        res,
+        store,
+        FakeScholar(),
+        FakeDownloader({ARXIV: synthetic_pdf}),
+    )
+    assert result.source is TextSource.FULL_TEXT
+    assert result.cited_paper_id == sample.paper_id
+    stored = store.load_parsed(sample.paper_id, "1")
+    assert stored.source.filename == "friendly-name.pdf"
