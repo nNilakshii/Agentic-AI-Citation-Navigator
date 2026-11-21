@@ -1,0 +1,49 @@
+{
+  "questions": 57,
+  "statements_judged": 71,
+  "faithfulness": 0.9295774647887324,
+  "verdicts": {
+    "supported": 0.9295774647887324,
+    "partial": 0.07042253521126761,
+    "unsupported": 0.0
+  },
+  "answers_fully_supported": 0.8,
+  "quote_enough": 0.9014084507042254,
+  "dropped_by_quote_check": 0.0,
+  "by_kind": {
+    "contribution": {
+      "questions": 19,
+      "answered": 0.6842105263157895,
+      "insufficient": 0.3157894736842105,
+      "statements": 28,
+      "supported": 0.9285714285714286
+    },
+    "specific": {
+      "questions": 19,
+      "answered": 0.631578947368421,
+      "insufficient": 0.3684210526315789,
+      "statements": 43,
+      "supported": 0.9302325581395349
+    },
+    "off-topic": {
+      "questions": 19,
+      "answered": 0.0,
+      "insufficient": 1.0,
+      "statements": 0,
+      "supported": null
+    }
+  },
+  "judge_check": {
+    "planted": 60,
+    "planted_caught": 0.9833333333333333,
+    "controls": 60,
+    "controls_supported": 0.9833333333333333
+  },
+  "citations": 19,
+  "failed_answers": 0,
+  "unjudged": 0,
+  "model": "gemini-3.6-flash",
+  "judge_model": "gemini-3.6-flash",
+  "judge_thinking_budget": 1024,
+  "judge_version": "1"
+}

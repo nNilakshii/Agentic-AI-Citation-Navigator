@@ -21,7 +21,11 @@ Evaluation harnesses, one per measured capability. Nothing runs until real data 
 - `agent/` — tool routing (3.6): `backend/.venv/bin/python eval/agent/run_routing_eval.py [--save]`
   scores the model router and the keyword rules on 50 hand-labelled questions
   (`routing_questions.json`, written for this project). Gemini key needed.
-- `chat_faithfulness/` — RAGAS-style groundedness/faithfulness for the agentic chat (Phase 3).
+- `chat_faithfulness/` — faithfulness of the chat's answers (3.8):
+  `backend/.venv/bin/python eval/chat_faithfulness/run_faithfulness_eval.py [--save]`. Asks the
+  real `/ask` path three questions per citation (19 citations with full text across the
+  samples), judges every statement against its passage with a thinking Gemini judge, and
+  tests the judge on planted errors. Everything is cached in `data/raw/faithfulness/`
+  (statement records hold cited-paper text and stay there); aggregates in `results/`.
 
-Each subfolder has a `run_*.py` stub: it defines the expected input/output contract now so
-the metric code and the feature code can be built in parallel.
+Tests for every harness: `backend/.venv/bin/python -m pytest eval`.

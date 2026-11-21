@@ -64,9 +64,19 @@ class GeminiClient:
     *content* (are these real sentence ids?) rather than syntax.
     """
 
-    def __init__(self, *, api_key: str | None = None, model: str | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        api_key: str | None = None,
+        model: str | None = None,
+        thinking_budget: int | None = None,
+    ) -> None:
         settings = get_settings()
         self.model = model or settings.gemini_model
+        #: None: the app setting. A judge (3.8) thinks; the app's calls do not.
+        self.thinking_budget = (
+            settings.llm_thinking_budget if thinking_budget is None else thinking_budget
+        )
         self._api_key = api_key or settings.gemini_api_key
         self._client = None  # built lazily; see _get_client
 
@@ -103,9 +113,7 @@ class GeminiClient:
             system_instruction=system,
             # This is a selection task, not a reasoning one. Thinking tokens
             # cost latency and free-tier quota without improving it.
-            thinking_config=types.ThinkingConfig(
-                thinking_budget=settings.llm_thinking_budget
-            ),
+            thinking_config=types.ThinkingConfig(thinking_budget=self.thinking_budget),
         )
         # Resolved before the try: a missing key is a configuration fault and
         # must not be caught below and reported as an upstream failure.

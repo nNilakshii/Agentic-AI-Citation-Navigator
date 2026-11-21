@@ -127,3 +127,12 @@ def test_the_configuration_error_is_an_llm_error():
 
 def test_the_model_name_is_reported():
     assert GeminiClient(api_key="k", model="gemini-test").model == "gemini-test"
+
+
+def test_thinking_budget_defaults_to_the_setting_and_can_be_set_per_client():
+    from app.config import get_settings
+
+    assert (
+        GeminiClient(api_key="k").thinking_budget == get_settings().llm_thinking_budget
+    )
+    assert GeminiClient(api_key="k", thinking_budget=1024).thinking_budget == 1024
