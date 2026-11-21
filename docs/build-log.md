@@ -863,3 +863,57 @@ The model's stated confidence is no signal: "high" on 98% of rows. As in 2.8, a 
 routing on intent (a "method" citation suggests "what exactly did they take?") is 3.6. 3.3, a
 fine-tuned SciBERT, would now have to beat 0.835 to be worth its training.
 
+## Task 3.6 — the agent picks its tools
+
+`POST /papers/{id}/citations/{anchor}/chat` takes any question about a citation and decides
+which of four existing tools answer it: `evidence` (what the cited paper says, 3.4), `locate`
+(where the citation points, 2.7), `intent` (why it is cited, 3.2) and `impact` (how
+influential, 3.5).
+
+**The one design decision: the agent only routes.** It does not write a combined answer
+across the tools. Every tool's output already carries its own grounding — verified quotes,
+counted facts, a ranked passage list, a label from a closed list — and a model-written
+summary on top would be the one part of the chat with no check on it. So the response has
+one section per routed tool, and the route itself is returned, so a wrong route is visible
+as "answered a different question", never as a confident wrong answer.
+
+**Routing is grounded the same way as everything else.** The model picks from the closed
+list of four; invented names ("search_web") are dropped and counted, at most three are kept.
+If there is no key, the call fails or the reply has no usable tool, keyword rules route
+instead — the chat degrades rather than breaks. One failing tool (no full text, no reference
+link) is reported in `errors` while the others still answer.
+
+**Budget.** A chat question can make three model calls (router, intent, evidence). Charging
+each would have made one question cost three of a visitor's ten daily questions, so the
+budget is checked once per question, at the first model call it makes. Cached routes and
+labels cost nothing. When the budget is spent, the router's budget refusal is treated as
+"no model": the rules route, and `impact` and `locate` — which need no model — still answer.
+
+**How well it routes.** 50 reader questions written for this project and labelled with the
+tool(s) that should answer them (18 evidence, 10 impact, 10 intent, 8 locate, 4 needing two
+tools), many deliberately phrased without the obvious keyword ("Is this a big deal in the
+field?"). Scored once, router prompt as first written:
+
+| Router | Exact tool set | First tool right |
+|---|---|---|
+| keyword rules | 50% | 58% |
+| **Gemini router** | **96%** | **98%** |
+
+The rules are precise but miss paraphrases (intent recall 0.17, impact 0.42). The model's two
+misses are both borderline: "In which sections of my paper does this reference come up?"
+(gold `impact`, which reports where the paper cites the work; routed `locate`), and "What are
+they using from this paper and where is it?" (gold `intent` + `locate`; routed `locate` +
+`evidence`, which is defensible). 50 hand-written questions is a sanity check on routing,
+not a benchmark; the questions were written before any router saw them.
+
+**Live**, on "Attention Is All You Need" citing Bahdanau et al.: "Why do they cite this, and
+how influential is it?" → `intent` (background, high) + `impact` (Semantic Scholar 30,818,
+OpenAlex 26,032; cited 5 times across 4 sections); "How does the attention in the cited paper
+work?" → `evidence`, answered with 4 verified quotes; "Where in the cited paper is this
+described?" → `locate`, whose top passage is weak — that citing sentence cites the paper
+as a whole, the 2.10 "vague citation" case, and `intent` now labels it as background.
+
+A regex bug caught by the tests: the "why cite" rule ended in a word boundary after `cit`,
+so it never matched "cite". The panel (3.7) still calls `/ask`; moving it to `/chat` is
+3.10's milestone.
+

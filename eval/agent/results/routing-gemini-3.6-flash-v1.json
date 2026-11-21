@@ -1,0 +1,81 @@
+{
+  "model": "gemini-3.6-flash",
+  "router_version": "1",
+  "fell_back": 0,
+  "rules": {
+    "n": 50,
+    "exact": 0.5,
+    "first_right": 0.58,
+    "per_tool": {
+      "evidence": {
+        "precision": 0.47368421052631576,
+        "recall": 0.9,
+        "gold": 20
+      },
+      "locate": {
+        "precision": 0.7142857142857143,
+        "recall": 0.5,
+        "gold": 10
+      },
+      "intent": {
+        "precision": 1.0,
+        "recall": 0.16666666666666666,
+        "gold": 12
+      },
+      "impact": {
+        "precision": 1.0,
+        "recall": 0.4166666666666667,
+        "gold": 12
+      }
+    }
+  },
+  "llm": {
+    "n": 50,
+    "exact": 0.96,
+    "first_right": 0.98,
+    "per_tool": {
+      "evidence": {
+        "precision": 0.9523809523809523,
+        "recall": 1.0,
+        "gold": 20
+      },
+      "locate": {
+        "precision": 0.9090909090909091,
+        "recall": 1.0,
+        "gold": 10
+      },
+      "intent": {
+        "precision": 1.0,
+        "recall": 0.9166666666666666,
+        "gold": 12
+      },
+      "impact": {
+        "precision": 1.0,
+        "recall": 0.9166666666666666,
+        "gold": 12
+      }
+    }
+  },
+  "model_misses": [
+    {
+      "q": "In which sections of my paper does this reference come up?",
+      "gold": [
+        "impact"
+      ],
+      "routed": [
+        "locate"
+      ]
+    },
+    {
+      "q": "What are they using from this paper and where is it in the original?",
+      "gold": [
+        "intent",
+        "locate"
+      ],
+      "routed": [
+        "locate",
+        "evidence"
+      ]
+    }
+  ]
+}

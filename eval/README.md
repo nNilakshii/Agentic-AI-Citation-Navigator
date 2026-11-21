@@ -18,6 +18,9 @@ Evaluation harnesses, one per measured capability. Nothing runs until real data 
   [--sample 200] [--prompt-version N]`; test once with `--split test --no-section --save`.
   Gemini key needed; replies cached in `data/raw/intent-cache/`, per-row predictions in
   `data/raw/intent-predictions/`, aggregate results in `intent/results/`.
+- `agent/` — tool routing (3.6): `backend/.venv/bin/python eval/agent/run_routing_eval.py [--save]`
+  scores the model router and the keyword rules on 50 hand-labelled questions
+  (`routing_questions.json`, written for this project). Gemini key needed.
 - `chat_faithfulness/` — RAGAS-style groundedness/faithfulness for the agentic chat (Phase 3).
 
 Each subfolder has a `run_*.py` stub: it defines the expected input/output contract now so

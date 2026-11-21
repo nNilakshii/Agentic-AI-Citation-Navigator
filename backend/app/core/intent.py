@@ -140,6 +140,7 @@ async def classify(
     section: str | None = None,
     cache_dir: Path | None = None,
     version: str = INTENT_VERSION,
+    spend=None,
 ) -> Intent:
     """The intent of the citation in ``citing_text``.
 
@@ -151,6 +152,8 @@ async def classify(
     if path is not None and path.exists():
         result = read_reply(json.loads(path.read_text()))
         return Intent(result.intent, result.confidence, cached=True)
+    if spend is not None:
+        spend()  # a budget check; a cached label costs nothing
     reply = await llm.generate_json(prompt=prompt, schema=SCHEMA, system=SYSTEM)
     if not isinstance(reply, dict):
         raise LLMError(f"{llm.model} returned {type(reply).__name__}, not an object")

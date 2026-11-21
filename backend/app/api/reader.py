@@ -21,6 +21,7 @@ from app.core.goals import GOAL_SPECS
 from app.core.highlights import locate_spans
 from app.core.pdf_parser import PARSER_VERSION, paper_id_for, parse_pdf
 from app.core.bibliometrics import BIBLIOMETRICS_VERSION, bibliometrics_for, is_stale
+from app.core import agent
 from app.core.cited_text import fetch_cited_text
 from app.core.embedding import CACHE_DIR as EMBEDDING_CACHE
 from app.core.embedding import Embedder, EmbedderUnavailable, get_embedder
@@ -33,9 +34,11 @@ from app.core.localizer import (
 )
 from app.core.passages import PASSAGE_VERSION
 from app.core.passages import passages_from_paper
+from app.core.intent import classify
 from app.core.reading_path import RANKER_VERSION, build_reading_path
 from app.core.resolution import RESOLVER_VERSION, resolve_references
 from app.llm.client import LLMClient, LLMError, LLMNotConfigured, get_llm_client
+from app.models.agent import ChatAnswer, CitationIntent
 from app.models.bibliometrics import Bibliometrics
 from app.models.citation import CitationMap
 from app.models.cited import CitedText
@@ -56,6 +59,9 @@ MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
 #: Sample papers fetched by ``scripts/fetch_sample_papers.py`` (task 0.7).
 SAMPLES_DIR = Path(__file__).resolve().parents[3] / "data" / "samples"
+
+#: The agent's own caches: routes and intent labels (3.6).
+AGENT_CACHE = Path(__file__).resolve().parents[3] / "data" / "cache" / "agent"
 
 _PDF_MAGIC = b"%PDF-"
 _PAPER_ID = re.compile(r"^[0-9a-f]{64}$")
@@ -423,12 +429,37 @@ async def ask_citation(
     """
     paper = _load_or_404(paper_id, store)
     citations = build_citation_map(paper)
-    anchor = next((a for a in citations.anchors if a.id == anchor_id), None)
-    if anchor is None:
-        raise HTTPException(
-            status_code=404, detail=f"no citation {anchor_id} in {paper_id}"
-        )
-    question = " ".join(body.question.split())
+    anchor = _anchor_or_404(paper, citations, anchor_id)
+    return await _grounded_answer(
+        paper,
+        citations,
+        anchor,
+        " ".join(body.question.split()),
+        store,
+        scholar,
+        downloader,
+        openalex,
+        embedder,
+        llm,
+        spend=lambda: check_ask_budget(request),
+    )
+
+
+async def _grounded_answer(
+    paper: ParsedPaper,
+    citations: CitationMap,
+    anchor,
+    question: str,
+    store: PaperStore,
+    scholar: SemanticScholar,
+    downloader: Downloader,
+    openalex: OpenAlex,
+    embedder: Embedder,
+    llm: LLMClient,
+    spend,
+) -> GroundedAnswer:
+    """3.4's answer, cached by question; shared by ``/ask`` and ``/chat``."""
+    paper_id, anchor_id = paper.paper_id, anchor.id
     key = hashlib.sha256(
         json.dumps(
             [
@@ -462,7 +493,7 @@ async def ask_citation(
             embedder,
             llm,
             cache_dir=EMBEDDING_CACHE,
-            spend=lambda: check_ask_budget(request),
+            spend=spend,
         )
     except (LLMNotConfigured, EmbedderUnavailable) as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
@@ -473,6 +504,144 @@ async def ask_citation(
     if answer.status in (AnswerStatus.ANSWERED, AnswerStatus.INSUFFICIENT):
         store.save_answer(key, answer)
     return answer
+
+
+class ChatRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=MAX_QUESTION_CHARS)
+
+
+@router.post(
+    "/papers/{paper_id}/citations/{anchor_id}/chat",
+    response_model=ChatAnswer,
+    summary="Ask anything about a citation; the agent picks the tools (task 3.6)",
+)
+async def chat_citation(
+    request: Request,
+    paper_id: str,
+    anchor_id: str,
+    body: ChatRequest,
+    store: PaperStore = Depends(get_store),
+    scholar: SemanticScholar = Depends(get_scholar),
+    downloader: Downloader = Depends(get_downloader),
+    openalex: OpenAlex = Depends(get_openalex),
+    embedder: Embedder = Depends(get_embedder),
+    llm: LLMClient = Depends(get_llm_client),
+) -> ChatAnswer:
+    """Route the question (model, else keyword rules), run those tools, return
+    each tool's own grounded output side by side.
+
+    A question counts once against the daily question budget, however many
+    model calls it takes; with the budget spent, routing falls back to the
+    rules and the tools that need no model still answer.
+    """
+    paper = _load_or_404(paper_id, store)
+    citations = build_citation_map(paper)
+    anchor = _anchor_or_404(paper, citations, anchor_id)
+    question = " ".join(body.question.split())
+    citance = citance_query(paper, citations, anchor_id)
+
+    spent = False
+
+    def spend_once() -> None:
+        nonlocal spent
+        if not spent:
+            check_ask_budget(request)
+            spent = True
+
+    def router_spend() -> None:
+        try:
+            spend_once()
+        except HTTPException as error:
+            raise LLMError(str(error.detail)) from error
+
+    chosen = await agent.route(
+        question, llm, citance, cache_dir=AGENT_CACHE / "routes", spend=router_spend
+    )
+
+    async def evidence():
+        try:
+            return await _grounded_answer(
+                paper,
+                citations,
+                anchor,
+                question,
+                store,
+                scholar,
+                downloader,
+                openalex,
+                embedder,
+                llm,
+                spend=spend_once,
+            )
+        except HTTPException as error:
+            raise agent.ToolError(str(error.detail)) from error
+
+    async def locate():
+        try:
+            return await run_in_threadpool(
+                localize_citation,
+                paper_id,
+                anchor_id,
+                DEFAULT_K,
+                store,
+                scholar,
+                downloader,
+                openalex,
+                embedder,
+            )
+        except HTTPException as error:
+            raise agent.ToolError(str(error.detail)) from error
+
+    async def intent():
+        try:
+            found = await classify(
+                citance, llm, cache_dir=AGENT_CACHE / "intent", spend=spend_once
+            )
+        except LLMError as error:
+            raise agent.ToolError(f"intent model unavailable: {error}"[:200]) from error
+        except HTTPException as error:
+            raise agent.ToolError(str(error.detail)) from error
+        return CitationIntent(
+            intent=found.intent,
+            confidence=found.confidence,
+            citance=citance,
+            model=getattr(llm, "model", None),
+        )
+
+    async def impact():
+        if anchor.reference_id is None:
+            raise agent.ToolError("this citation is not linked to a reference entry")
+        try:
+            return await run_in_threadpool(
+                reference_bibliometrics,
+                paper_id,
+                anchor.reference_id,
+                False,
+                store,
+                scholar,
+                openalex,
+            )
+        except HTTPException as error:
+            raise agent.ToolError(str(error.detail)) from error
+
+    result = await agent.run(
+        chosen,
+        {"evidence": evidence, "locate": locate, "intent": intent, "impact": impact},
+    )
+    return ChatAnswer(
+        question=question,
+        route=chosen.tools,
+        routed_by=chosen.by,
+        route_notes=chosen.notes
+        + (
+            [f"{chosen.dropped} unknown tool name(s) dropped"] if chosen.dropped else []
+        ),
+        evidence=result.parts.get("evidence"),
+        location=result.parts.get("locate"),
+        intent=result.parts.get("intent"),
+        impact=result.parts.get("impact"),
+        errors=result.errors,
+    )
 
 
 @router.get("/papers/{paper_id}/pdf", summary="Get the original PDF bytes")
@@ -649,6 +818,15 @@ def _resolution(
         if resolution.complete:
             store.save_resolution(resolution)
     return resolution
+
+
+def _anchor_or_404(paper: ParsedPaper, citations: CitationMap, anchor_id: str):
+    anchor = next((a for a in citations.anchors if a.id == anchor_id), None)
+    if anchor is None:
+        raise HTTPException(
+            status_code=404, detail=f"no citation {anchor_id} in {paper.paper_id}"
+        )
+    return anchor
 
 
 def _load_or_404(paper_id: str, store: PaperStore) -> ParsedPaper:
